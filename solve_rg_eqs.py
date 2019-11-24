@@ -1,6 +1,12 @@
 import numpy as np
 from scipy.optimize import root
 
+VERBOSE=True
+
+def log(msg):
+    if VERBOSE:
+        print(msg)
+
 def rationalZ(x, y):
     return x*y/(x-y)
 
@@ -36,16 +42,19 @@ def rgEqs1(es, ws, etas, g):
     Zf = rationalZ
     Ne = len(es)//2
     Nw = len(ws)//2
+    L = len(etas)//2
+    cetas = etas[:L] + 1j*etas[L:]
     ces = es[:Ne] + 1j*es[Ne:]
     cws = ws[:Nw] + 1j*ws[Nw:]
     eqs = np.zeros(Ne, dtype=complex)
     for i, e in enumerate(ces):
-        eqs[i] = (g*(2*Zf(ces[ces!=e], e).sum() - Zf(cws, e).sum()
-                   - Zf(etas, e).sum()) - 1.)
+        eqs[i] = (
+                2*Zf(ces[ces!=e], e).sum()
+                - Zf(cws, e).sum() - Zf(cetas, e).sum()) + 1./g
     return np.concatenate((eqs.real, eqs.imag))
 
 
-def rgEqs2(ws, es, etas, g):
+def rgEqs2(ws, es, etas):
     Zf = rationalZ
     Ne = len(es)//2
     Nw = len(ws)//2
@@ -62,85 +71,80 @@ def solve_rgEqs(L, Ne, Nw, gf):
                 [(2*i+1)*np.pi/L for i in range(L)],
                 dtype=np.complex128)
 
-    gs = np.linspace(0, 1, 100)*gf
-    print(gs)
+    gs = np.linspace(0, 1, 10)*gf
+    dg = gf/(1.*len(gs))
 
-    kim = 1j*np.cos(np.pi*np.arange(L))
-    ceta = k + kim
-
-    ces = k[:Ne]
-    cws = k[:Nw] - k[0] # not quite what the exact zero coupling solution is, but this seems to be ok
-    # cws = np.concatenate(([0.], k[[2*(i+1) for i in range(Nw-1)]]/2.0))
+    ces = k[:Ne] + gs[1]*.00001*np.cos(np.pi*np.arange(Ne))
+    # ces = ces - .05 * np.cos(np.pi*np.arange(Ne))
+    # cws = k[:Nw] - k[0] # not quite what the exact zero coupling solution is, but this seems to be ok
+    cws = np.concatenate(([0.], k[[2*(i+1) for i in range(Nw-1)]]/2.0))
     print('Initial guesses:')
     print(ces)
     print(cws)
-    # cws = .1*np.exp(1j*np.random.rand(Nw))
-    # vars = np.concatenate((np.concatenate((es.real, ws.real)),
-    #                        np.concatenate((es.imag, ws.imag))))
+
     es = np.concatenate((ces.real, ces.imag))
     ws = np.concatenate((cws.real, cws.imag))
 
     print('Incrementing g with complex k')
+    kim = 1j*np.cos(np.pi*np.arange(L))*0
+    ceta = k + kim
     eta = np.concatenate((ceta.real, ceta.imag))
+    eprev = es
+    wprev = ws
     for i, g in enumerate(gs[1:]):
-        # sol = root(rgEqs, vars, args=(Ne, Nw, eta, g, Zf),
-        #            method='lm')
-        wsol = root(rgEqs2, ws, args=(es, eta, g), method='lm')
+        log(g)
+        wsol = root(rgEqs2, ws, args=(es, eta), method='lm')
         ws = wsol.x
         esol = root(rgEqs1, es, args=(ws, eta, g), method='lm')
         es = esol.x
 
         e1 = np.max(np.abs(rgEqs1(es, ws, eta, g)))
-        e2 = np.max(np.abs(rgEqs2(ws, es, eta, g)))
+        e2 = np.max(np.abs(rgEqs2(ws, es, eta)))
         if e1 > 10**-12 or e2 > 10**-12:
-            print('Highish errors:')
-            print('g = {}'.format(g))
-            print(e1)
-            print(e2)
+            log('Highish errors:')
+            log('g = {}'.format(g))
+            log(e1)
+            log(e2)
+
     print('')
     print('E_alpha:')
     print(es[:Ne]+1j*es[Ne:])
     print('omega_beta:')
     print(ws[:Nw]+1j*ws[Nw:])
     print('')
-    print('Errors at this point:')
-    print(rgEqs1(es, ws, eta, g))
-    print(rgEqs2(es, ws, eta, g))
     print('Incrementing k to be real')
     scale = 1 - np.linspace(0, 1, 10)
     for i, s in enumerate(scale):
         ceta = k + s*kim
         eta = np.concatenate((ceta.real, ceta.imag))
 
-        wsol = root(rgEqs2, ws, args=(es, eta, g), method='lm')
+        esol = root(rgEqs1, es, args=(ws, eta, gf), method='lm')
+        es = esol.x
+
+        wsol = root(rgEqs2, ws, args=(es, eta), method='lm')
         ws = wsol.x
 
-        esol = root(rgEqs1, es, args=(ws, eta, g), method='lm')
-        es = esol.x
-        e1 = np.max(np.abs(rgEqs1(es, ws, eta, g)))
-        e2 = np.max(np.abs(rgEqs2(ws, es, eta, g)))
+        e1 = np.max(np.abs(rgEqs1(es, ws, eta, gf)))
+        e2 = np.max(np.abs(rgEqs2(ws, es, eta)))
         if max(e1, e2) > 10**-10:
-            print('Highish errors:')
-            print('s = {}'.format(s))
-            print(e1)
-            print(e2)
-
-
+            log('Highish errors:')
+            log('s = {}'.format(s))
+            log(e1)
+            log(e2)
 
     print('This should be about zero:')
     print(np.max(np.abs(rgEqs1(es, ws, eta, g))))
     print('Same with this:')
-    print(np.max(np.abs(rgEqs2(ws, es, eta, g))))
+    print(np.max(np.abs(rgEqs2(ws, es, eta))))
     print('E_alpha:')
     print(es[:Ne]+1j*es[Ne:])
     print('omega_beta:')
     print(ws[:Nw]+1j*ws[Nw:])
 
 
-
 if __name__ == '__main__':
     L = 4
     Ne = 2
     Nw = 2
-    gf = -1.
+    gf = -.01
     solve_rgEqs(L, Ne, Nw, gf)
