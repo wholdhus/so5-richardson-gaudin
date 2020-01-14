@@ -65,6 +65,24 @@ def make_Z(epsilon):
             Z[j, i] = -1 * Z[i, j]
     return Z
 
+
+def construct_iom(epsilon, ops, g, ind=0):
+    Z = make_Z(epsilon)
+    iom = ops['h'][ind]
+    for j in range(L):
+        if j != ind:
+            iom += g*Z[j,i]*(ops['pm1d'][ind].dot(ops['pm1'][j])
+                            +ops['p0d'][ind].dot(ops['p0'][j])
+                            +ops['p1d'][ind].dot(ops['p1'][j])
+                            +ops['pm1'][ind].dot(ops['pm1d'][j])
+                            +ops['p0'][ind].dot(ops['p0d'][j])
+                            +ops['p1'][ind].dot(ops['p1d'][j])
+                            +0.5*ops['sp'][ind].dot(ops['sm'][j])
+                            +0.5*ops['sm'][ind].dot(ops['sp'][j])
+                            + ops['sz'][ind].dot(ops['sz'][j])
+                            + ops['h'][ind].dot(ops['h'][j]))
+    return iom
+
 def construct_ioms(epsilon, ops, g):
     L = len(epsilon)
     Z = make_Z(epsilon)

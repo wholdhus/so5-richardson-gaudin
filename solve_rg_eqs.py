@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.optimize import root
+from scipy.optimize import root, brenth
 
 VERBOSE=True
 
@@ -45,7 +45,7 @@ def rgEqs(vars, etas, Ne, Nw, g, c1=1.0):
     for i, e in enumerate(ces):
         # If I leave out a factor of 2 this solves nicely?
         # Mathematica seems to suggest the factor of 2 was an error?
-        set1[i] = (g*(Zf(ces[np.arange(Ne) != i], e).sum()
+        set1[i] = (g*(2*Zf(ces[np.arange(Ne) != i], e).sum()
                       - Zf(cws, e).sum() - Zf(cetas, e).sum())
                    + c1)
 
@@ -85,17 +85,33 @@ def rgEqs2(ws, es):
     return np.concatenate((eqs.real, eqs.imag))
 
 
+def extra_eq(w, es):
+    eq = rationalZ(es, w).sum()
+    return eq
+
+
+def find_extra_w(es, epsilon=10**-6):
+    below = es[0] + epsilon
+    above = es[2] - epsilon
+    w = brenth(extra_eq, below, above, args=(es))
+    return w
+
+
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
     if double:
         ces = np.array([k[i//2] for i in range(Ne)], dtype=np.complex128)
         # cws = np.array([k[i//2] - k[0] for i in range(Nw)], dtype=np.complex128)
         cws = np.zeros(Nw, dtype=np.complex128)
+        cws[-1] = find_extra_w(ces)
+        # one of these should be nonzero, which is arbitrary
         ces += 1j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
         cws += 1j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
     else:
         ces = np.array(k[:Ne], dtype=np.complex128)
-        cws = (np.array(k[:Ne], dtype=np.complex128) - k[0])/2
-        # cws = np.zeros(Nw, dtype=np.complex128)
+        # cws = (np.array(k[:Ne], dtype=np.complex128) - 0.25*k[0])/2
+        cws = np.zeros(Nw, dtype=np.complex128)
+        cws += 1j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+
     return ces, cws
 
 
@@ -120,7 +136,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k):
     ceta = k + kim
     eta = np.concatenate((ceta.real, ceta.imag))
 
-    ces, cws = g0_guess(L, Ne, Nw, k, double=False)
+    ces, cws = g0_guess(L, Ne, Nw, k)
     log('Initial guesses:')
     log(ces)
     log(cws)
@@ -146,10 +162,6 @@ def solve_rgEqs(L, Ne, Nw, gf, k):
                    method='lm')
         vars = sol.x
         ces, cws = unpack_vars(vars, Ne, Nw)
-        print('e_alpha at g = {}'.format(g))
-        print(ces)
-        print('')
-
 
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
         if np.max(er) > 10**-12:
@@ -169,7 +181,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k):
     log(cws)
     print('')
     print('Incrementing k to be real')
-    scale = 1 - np.linspace(0, 1, 10)
+    scale = 1 - np.linspace(0, 1, 100)
     for i, s in enumerate(scale):
         ceta = k + s*kim
         eta = np.concatenate((ceta.real, ceta.imag))
@@ -205,13 +217,11 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
 
 if __name__ == '__main__':
     L = 4
-    Ne = 2
-    Nw = 2
-    gf = -0.5
+    Ne = 4
+    Nw = 4
+    gf = -0.6
 
-    from exact_qs_so5 import iom_dict, form_basis
-    from quspin.operators import quantum_operator
-    basis = form_basis(2*L, Ne, Nw)
+
 
 
     #ks = np.array(
@@ -232,12 +242,36 @@ if __name__ == '__main__':
     for r in rk:
         print(r)
 
-    if L < 6:
+    print('From RG, energy is:')
+    print(np.sum(ks*rk))
+    rge = np.sum(ks*rk)
 
-        iomd = iom_dict(L, Ne, Nw, gf, ks, k1=0)
-        Rk = quantum_operator(iomd, basis=basis)
-        print('Checking first iom')
-        es, v = Rk.eigh()
-        print('Smallest distance from ED result:')
-        print(np.min(np.abs(rk[0]-es)))
-        print(np.min(np.abs(rk[0]+es)))
+    if L < 6:
+        from exact_qs_so5 import iom_dict, form_basis, hamiltonian_dict
+        from quspin.operators import quantum_operator
+        basis = form_basis(2*L, Ne, Nw)
+        print('Checking all ioms')
+        for i in range(L):
+            iomd = iom_dict(L, Ne, Nw, gf, ks, k1=i)
+            Rk = quantum_operator(iomd, basis=basis)
+            es, v = Rk.eigh()
+            print('Smallest distance from ED result for {}th iom:'.format(i))
+            diffs = np.abs(rk[i]-es)
+            print(np.min(diffs))
+            print('This is the {}th ED ev'.format(np.argmin(diffs)))
+
+        hd = hamiltonian_dict(L, Ne, Nw, gf, ks)
+        H = quantum_operator(hd, basis=basis)
+        es, v = H.eigh()
+        for e in es:
+            if np.abs(e-rge) < 10**-6:
+                print('Close energy! Difference: ')
+                print(e-rge)
+        # print('Energies:')
+        # for i, e in enumerate(es):
+        #     if i == 0:
+        #         print(e)
+        #     elif es[i-1] != e:
+        #         print(e)
+        #     else:
+        #         print('Duplicate!')

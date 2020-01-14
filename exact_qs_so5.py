@@ -1,6 +1,8 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator
 import numpy as np
+from scipy.optimize import root
+
 
 
 def form_basis(L, Nup, Ndown):
@@ -8,161 +10,127 @@ def form_basis(L, Nup, Ndown):
     print(basis)
     return basis
 
+def casimir(L, k):
+    p_k = L + k
+    m_k = l - (k+1)
 
-def construct_hamiltonian_dict(L, Nup, Ndown, G, k):
+
+def hamiltonian_dict(L, Nup, Ndown, G, k):
     # k should include positive and negative values
     pvals = G*np.outer(k, k)
     dvals = np.abs(pvals)
-    pos_k = [] # kinetic energy terms
-    neg_k = []
+    all_k = []
     ppairing = [] # spin 1 pairing
-    mpairing = [] # spin -1 pairing
     zpairing = [] # spin 0 pairing
-    densdens = [] # n_k n_k' interaction
+    samesame = [] # n_k n_k' interaction
+    dens = []
     spm = [] # spin spin interaction
-    szsz = []
     for k1 in range(L):
         p_k1 = L + k1 # index of +k, spin up fermion
         m_k1 = L - (k1+1) # index of -k, spin up fermion
 
-        pos_k += [[k[k1], p_k1]]
-        neg_k += [[k[k1], m_k1]]
+        all_k += [[0.5*k[k1], p_k1], [0.5*k[k1], m_k1]]
 
         for k2 in range(L):
+            Zkk = G*k[k2]*k[k1]
             p_k2 = L + k2 # index of +k, spin up fermion
             m_k2 = L - (k2+1) # index of -k, spin down fermion
-
             ppairing += [
-                         [pvals[k1, k2], p_k1, m_k1, m_k2, p_k2]
+                         [Zkk, p_k1, m_k1, m_k2, p_k2]
                         ]
-            mpairing += [
-                         [pvals[k1, k2], p_k1, m_k1, m_k2, p_k2]
-                         ]
             zpairing += [
-                         [pvals[k1, k2]/np.sqrt(2), p_k1, m_k2, m_k1, p_k2],
-                         [pvals[k1, k2]/np.sqrt(2), m_k1, p_k2, p_k1, m_k2]
-                         ]
-            densdens += [[dvals[k1, k2], p_k1, p_k2],
-                         [dvals[k1, k2], p_k1, p_k2],
-                         [dvals[k1, k2], p_k1, m_k2],
-                         [dvals[k1, k2], p_k1, m_k2],
-                         [dvals[k1, k2], m_k1, p_k2],
-                         [dvals[k1, k2], m_k1, p_k2],
-                         [dvals[k1, k2], m_k1, m_k2],
-                         [dvals[k1, k2], m_k1, m_k2],
-                         [dvals[k1, k2], p_k1, p_k2],
-                         [dvals[k1, k2], p_k1, p_k2],
-                         [dvals[k1, k2], p_k1, m_k2],
-                         [dvals[k1, k2], p_k1, m_k2],
-                         [dvals[k1, k2], m_k1, p_k2],
-                         [dvals[k1, k2], m_k1, p_k2],
-                         [dvals[k1, k2], m_k1, m_k2],
-                         [dvals[k1, k2], m_k1, m_k2]
+                         [0.5*Zkk, p_k1, p_k2, m_k1, m_k2],
+                         [0.5*Zkk, m_k1, m_k2, p_k1, p_k2],
+                         [-0.5*Zkk, p_k1, m_k2, m_k1, p_k2],
+                         [-0.5*Zkk, m_k1, p_k2, p_k1, m_k2]
                         ]
             spm += [
-                       # splus sminus
-                        [dvals[k1, k2], p_k1, p_k1, p_k2, p_k2],
-                        [dvals[k1, k2], p_k1, p_k1, m_k1, m_k1],
-                        [dvals[k1, k2], m_k1, m_k1, p_k2, p_k2],
-                        [dvals[k1, k2], m_k1, m_k1, m_k1, m_k1],
-                       # smninus smplus
-                        [dvals[k1, k2], p_k1, p_k1, p_k2, p_k2],
-                        [dvals[k1, k2], p_k1, p_k1, m_k1, m_k1],
-                        [dvals[k1, k2], m_k1, m_k1, p_k2, p_k2],
-                        [dvals[k1, k2], m_k1, m_k1, m_k1, m_k1],
+                    [0.5*Zkk, p_k1, p_k2, p_k1, p_k2],
+                    [0.5*Zkk, p_k1, m_k2, p_k1, m_k2],
+                    [0.5*Zkk, m_k1, p_k2, m_k1, p_k2],
+                    [0.5*Zkk, m_k1, m_k2, m_k1, m_k2]
                     ]
-            szsz += [[dvals[k1, k2], p_k1, p_k2],
-                        [-dvals[k1, k2], p_k1, p_k2],
-                        [dvals[k1, k2], p_k1, m_k2],
-                        [-dvals[k1, k2], p_k1, m_k2],
-                        [dvals[k1, k2], m_k1, p_k2],
-                        [-dvals[k1, k2], m_k1, p_k2],
-                        [dvals[k1, k2], m_k1, m_k2],
-                        [-dvals[k1, k2], m_k1, m_k2],
-                        [-dvals[k1, k2], p_k1, p_k2],
-                        [dvals[k1, k2], p_k1, p_k2],
-                        [-dvals[k1, k2], p_k1, m_k2],
-                        [dvals[k1, k2], p_k1, m_k2],
-                        [-dvals[k1, k2], m_k1, p_k2],
-                        [dvals[k1, k2], m_k1, p_k2],
-                        [-dvals[k1, k2], m_k1, m_k2],
-                        [dvals[k1, k2], m_k1, m_k2]
+            samesame += [[0.5*Zkk, p_k1, p_k2],
+                         [0.5*Zkk, p_k1, m_k2],
+                         [0.5*Zkk, m_k1, p_k2],
+                         [0.5*Zkk, m_k1, m_k2]
                         ]
-    static = [['n|', pos_k], ['|n', neg_k],
+            dens += [
+                     [-0.5*Zkk, p_k1],
+                     [-0.5*Zkk, m_k1],
+                     [-0.5*Zkk, p_k2],
+                     [-0.5*Zkk, m_k2]
+                    ]
+    static = [['n|', all_k], ['|n', all_k],
               ['++--|', ppairing], ['--++|', ppairing],
               ['+-|+-', zpairing], ['-+|-+', zpairing],
-              ['|++--', mpairing], ['|--++', mpairing],
-              ['+-|+-', spm], ['n|n', szsz],
-              ['n|n', densdens]
+              ['|++--', ppairing], ['|--++', ppairing],
+              ['+-|-+', spm], ['-+|+-', spm],
+              ['nn|', samesame], # the up/down density density stuff cancels
+              ['|nn', samesame],
+              ['n|', dens],
+              ['|n', dens]
              ]
+
     return {'static': static}
     return op_dict
 
 
-def iom_dict(L, Nup, Ndown, G, k, ind=0):
-    
+def iom_dict(L, Nup, Ndown, G, k, k1=0):
+
     ppairing = [] # spin 1 pairing
-    mpairing = [] # spin -1 pairing
     zpairing = [] # spin 0 pairing
-    densdens = [] # combined n n, sz sz interactions
+    samesame = []
     dens = []
     spm = [] # s+/s-  interaction
-    k1 = ind
     p_k1 = L + k1 # index of +k, spin up fermion
     m_k1 = L - (k1+1) # index of -k, spin up fermion
-    # print('p_k1, m_k1 = {}, {}'.format(p_k1, m_k1))
+    print('p_k1, m_k1 = {}, {}'.format(p_k1, m_k1))
 
     all_k = [[0.5, p_k1], [0.5, m_k1]]
-    for k2 in np.arange(L)[np.arange(L) != k1]:
-        Zkk = G*k[k1]*k[k2]/(k[k1]-k[k2])
-        p_k2 = L + k2 # index of +k, spin up fermion
-        m_k2 = L - (k2+1) # index of -k, spin down fermion
-        # print('p_k2, m_k2  = {}, {}'.format(p_k2, m_k2))
-
-        ppairing += [
-                     [Zkk, p_k1, m_k1, m_k2, p_k2]
+    for k2 in range(L):
+        if k2 != k1:
+            Zkk = G*k[k2]*k[k1]/(k[k2]-k[k1])
+            p_k2 = L + k2 # index of +k fermions
+            m_k2 = L - (k2+1) # index of -k fermions
+            ppairing += [
+                         [Zkk, p_k1, m_k1, m_k2, p_k2]
+                        ]
+            zpairing += [
+                         [0.5*Zkk, p_k1, p_k2, m_k1, m_k2],
+                         [0.5*Zkk, m_k1, m_k2, p_k1, p_k2],
+                         [-0.5*Zkk, p_k1, m_k2, m_k1, p_k2],
+                         [-0.5*Zkk, m_k1, p_k2, p_k1, m_k2]
+                        ]
+            samesame += [[0.5*Zkk, p_k1, p_k2],
+                         [0.5*Zkk, p_k1, m_k2],
+                         [0.5*Zkk, m_k1, p_k2],
+                         [0.5*Zkk, m_k1, m_k2]
+                        ]
+            spm += [
+                    [0.5*Zkk, p_k1, p_k2, p_k1, p_k2],
+                    [0.5*Zkk, p_k1, m_k2, p_k1, m_k2],
+                    [0.5*Zkk, m_k1, p_k2, m_k1, p_k2],
+                    [0.5*Zkk, m_k1, m_k2, m_k1, m_k2]
                     ]
-        mpairing += [
-                     [Zkk, p_k1, m_k1, m_k2, p_k2]
-                     ]
-        zpairing += [
-                     [Zkk/np.sqrt(2), p_k1, m_k2, m_k1, p_k2],
-                     [Zkk/np.sqrt(2), m_k1, p_k2, p_k1, m_k2]
-                     ]
-        densdens += [[Zkk/2, p_k1, p_k2],
-                     [Zkk/2, p_k1, m_k2],
-                     [Zkk/2, m_k1, p_k2],
-                     [Zkk/2, m_k1, m_k2]
+            dens += [
+                     [-0.5*Zkk, p_k1],
+                     [-0.5*Zkk, m_k1],
+                     [-0.5*Zkk, p_k2],
+                     [-0.5*Zkk, m_k2]
                     ]
-        spm += [
-                   # splus sminus
-                    [Zkk, p_k1, p_k1, p_k2, p_k2],
-                    [Zkk, p_k1, p_k1, m_k1, m_k1],
-                    [Zkk, m_k1, m_k1, p_k2, p_k2],
-                    [Zkk, m_k1, m_k1, m_k1, m_k1],
-                   # smninus smplus
-                    [Zkk, p_k1, p_k1, p_k2, p_k2],
-                    [Zkk, p_k1, p_k1, m_k1, m_k1],
-                    [Zkk, m_k1, m_k1, p_k2, p_k2],
-                    [Zkk, m_k1, m_k1, m_k1, m_k1],
-                ]
-        dens += [[-0.5*Zkk, p_k1],
-                 [-0.5*Zkk, m_k1],
-                 [-0.5*Zkk, p_k2],
-                 [-0.5*Zkk, m_k2]
-                ]
     static = [['n|', all_k], ['|n', all_k],
               ['++--|', ppairing], ['--++|', ppairing],
               ['+-|+-', zpairing], ['-+|-+', zpairing],
-              ['|++--', mpairing], ['|--++', mpairing],
-              ['+-|+-', spm], # need to check these out woops
-              ['nn|', densdens], # the up/down density density stuff cancels
-              ['|nn', densdens],
+              ['|++--', ppairing], ['|--++', ppairing],
+              ['+-|-+', spm], ['-+|+-', spm],
+              ['nn|', samesame], # the up/down density density stuff cancels
+              ['|nn', samesame],
               ['n|', dens],
               ['|n', dens]
              ]
     return {'static': static}
-    return op_dict
+
 
 def constant_op_dict(L, c):
     co = []
@@ -202,30 +170,95 @@ def find_nk(L, state, basis):
     return nks
 
 
+def find_min_ev(operator, L):
+    e, v = operator.eigsh()
+    if e[0] > 0:
+        print('Positive eigenvalue: finding a minimum')
+        cdict = constant_op_dict(L, np.max(e))
+        cop = quantum_operator(cdict, basis=basis)
+        e2, v = (cop-operator).eigsh()
+        e = -(e2-e[0])
+    v0 = v[:, 0]
+    return np.min(e), v0
+
+
 def find_gs_observables(L, Nup, Ndown, g, k, basis, trysparse=True):
-    hdict = construct_hamiltonian_dict(L, Nup, Ndown, g, k)
+    hdict = hamiltonian_dict(L, Nup, Ndown, g, k)
 
     h = quantum_operator(hdict, basis=basis)
     if trysparse:
-        e, v = h.eigsh()
-        print('Initial energies:')
-        print(e)
-        if e[0] > 0:
-            cdict = constant_op_dict(L, e[0])
-            cop = quantum_operator(cdict, basis=basis)
-            e2, v = (cop - h).eigsh()
-            e = -(e2-e[0])
+        e0, v0 = find_min_ev(h, L)
     else:
         e, v = h.eigh()
         print('energies:')
         print(e)
-    v0 = v[:,0]
+        e0 = np.min(e)
+        v0 = v[:, 0]
     nks = find_nk(L, v0, basis)
-    return e[0], nks
+    return e0, nks
 
 
+def Z(x, y):
+    return x*y/(x-y)
 
-if __name__ == '__main__':
+
+def pairon_eqs(es, L, Ne, G, ks, rs):
+    ces = es[:Ne] + 1j*es[Ne:]
+    pairon_eqs = np.zeros(L, dtype=np.complex128)
+    for i, k in enumerate(ks):
+        pairon_eqs[i] = G*np.sum(Z(k, ces)) - rs[i]
+    # np.random.shuffle(pairon_eqs) # Does this help?
+    some = pairon_eqs[:Ne]
+    out = np.concatenate((some.real, some.imag))
+    # out = np.concatenate((pairon_eqs.real, pairon_eqs.imag))
+    # print(out)
+    return out
+
+
+def wairon_eqs(ws, ces, L, Nw):
+    cws = ws[:Nw] + 1j*ws[Nw:]
+    wairon_eqs = np.zeros(Nw, dtype=np.complex128)
+    for i, w in enumerate(cws):
+        otherws = cws[np.arange(Nw) != i]
+        wairon_eqs[i] = Z(otherws, w).sum()
+        wairon_eqs[i] += - Z(ces, w).sum()
+    out = np.concatenate((wairon_eqs.real, wairon_eqs.imag))
+    return out
+
+
+def find_pairons(L, Nup, Ndown, G, ks, basis, trysparse=True):
+    rs = np.zeros(L)
+    for i in range(L):
+        rd = iom_dict(L, Nup, Ndown, G, ks, k1=i)
+        r = quantum_operator(rd, basis=basis)
+        rs[i], _ = find_min_ev(r, L)
+        # if rs[i] < 0:
+        #     print('Woops this one is negativeroony!')
+        #     rvs, _ = r.eigsh()
+        #     rs[i] = np.min(rvs)
+    # guess = np.array([ks[i//2] for i in range(Nup)], dtype=np.complex128)
+    guess = np.array(np.random.rand(Nup), dtype=np.complex128)
+    rguess = np.concatenate((guess.real, guess.imag))
+    # padding = np.zeros(2*L-2*Nup) # so we have as many variables as equations
+    # rguess = np.concatenate((rguess, padding))
+    sol = root(pairon_eqs, rguess, args=(L, Nup, G, ks, rs))
+    es = sol.x[:Nup] + 1j*sol.x[Nup:]
+    er = pairon_eqs(sol.x, L, Nup, G, ks, rs)
+    print('Pairons found with maximum error:')
+    print(np.max(np.abs(er)))
+
+    rguess2 = np.concatenate((ks[:Ndown], np.zeros(Ndown)))
+    # rguess2 = np.concatenate((guess.real, guess.imag))
+    sol2 = root(wairon_eqs, rguess2, args=(es, L, Ndown))
+    ws = sol2.x[:Ndown] + 1j*sol2.x[Ndown:]
+    er = wairon_eqs(sol.x, es, L, Ndown)
+    print('Wairons found with maximum error:')
+    print(np.max(np.abs(er)))
+
+    return es, ws, rs
+
+
+def make_plots():
     import matplotlib.pyplot as plt
     L = int(input('L: '))
     Nup = int(input('Nup: '))
@@ -254,3 +287,40 @@ if __name__ == '__main__':
     plt.show()
 
     print(all_k)
+
+
+if __name__ == '__main__':
+    L = 4
+    ks = np.arange(L) + 1.0
+    G = 0
+    Nup = 2
+    Ndown = 2
+    basis = form_basis(2*L, Nup, Ndown)
+
+    ioms = np.zeros(L)
+    rd = iom_dict(L, Nup, Ndown, G, ks, k1=L-1)
+    r = quantum_operator(rd, basis=basis)
+    _, v0 = find_min_ev(r, L)
+    for i in range(L):
+        iod = iom_dict(L, Nup, Ndown, G, ks, k1=i)
+        io = quantum_operator(iod, basis=basis)
+        # rs, vs = io.eigh()
+        # ioms[i] = np.min(rs)
+        ioms[i] = io.matrix_ele(v0, v0)
+
+    e0 = np.sum(ioms*ks)
+
+    hd = hamiltonian_dict(L, Nup, Ndown, G, ks)
+    ho = quantum_operator(hd, basis=basis)
+    e1, _ = find_min_ev(ho, L)
+    print('Energy from sum of ioms:')
+    print(e0)
+
+    print('Energy from hamiltonian:')
+    print(e1)
+
+
+    # es, ws, rs = find_pairons(L, Nup, Ndown, G, ks, basis, trysparse=True)
+    # print('wooh')
+    # print(es)
+    # print(ws)
