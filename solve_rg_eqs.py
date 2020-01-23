@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.optimize import root, brenth
 
-VERBOSE=True
+VERBOSE=False
 
 def log(msg):
     if VERBOSE:
@@ -91,8 +91,8 @@ def extra_eq(w, es):
 
 
 def find_extra_w(es, epsilon=10**-6):
-    below = es[0] + epsilon
-    above = es[2] - epsilon
+    below = np.min(es) - epsilon
+    above = np.min(es) + epsilon
     w = brenth(extra_eq, below, above, args=(es))
     return w
 
@@ -100,12 +100,10 @@ def find_extra_w(es, epsilon=10**-6):
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
     if double:
         ces = np.array([k[i//2] for i in range(Ne)], dtype=np.complex128)
-        # cws = np.array([k[i//2] - k[0] for i in range(Nw)], dtype=np.complex128)
+        # cws = np.array([k[i//2] for i in range(Nw)], dtype=np.complex128)
         cws = np.zeros(Nw, dtype=np.complex128)
-        cws[-1] = find_extra_w(ces)
-        # one of these should be nonzero, which is arbitrary
         ces += 1j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
-        cws += 1j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+        cws += -3.2j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
     else:
         ces = np.array(k[:Ne], dtype=np.complex128)
         # cws = (np.array(k[:Ne], dtype=np.complex128) - 0.25*k[0])/2
@@ -125,12 +123,20 @@ def dvars(vars, pvars, dg, Ne, Nw):
     return deriv
 
 
-def solve_rgEqs(L, Ne, Nw, gf, k):
+def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01, first=None):
 
-    gs = np.linspace(0, 1, 100)*gf
-
-    dg = np.abs(gf/100)
-
+    g1 = 0.0125*L
+    g1s = np.arange(0, g1, dg)
+    print(g1s)
+    g2 = 10*g1
+    if g2 < gf:
+        g2s = np.arange(g1, g2, 0.1*dg)
+        print(g2s)
+        g3s = np.arange(g2, gf, dg)
+        gs = np.concatenate((np.concatenate((g1s, g2s)), g3s))
+    else:
+        gs = np.concatenate((g1s, np.arange(g1, gf, dg)))
+    print(gs)
     kim = .1j*np.cos(np.pi*np.arange(L))
     # kim = np.zeros(L)
     ceta = k + kim
@@ -140,65 +146,47 @@ def solve_rgEqs(L, Ne, Nw, gf, k):
     log('Initial guesses:')
     log(ces)
     log(cws)
-
-    #ws = np.concatenate((cws.real, cws.imag))
-    #es = np.concatenate((ces.real, ces.imag))
-    #log('Refining initial guesses')
-    #sole = root(rgEqs1, es, args=(ws, eta, gs[1]))
-    #es = sole.x
-    #ces = es[:Ne] + 1j*es[Ne:]
-    #log('New es:')
-    #log(ces)
-
     vars = pack_vars(ces, cws)
     # last = vars
     log('Eqs with initial guess:')
     eq0 = rgEqs(vars, eta, Ne, Nw, gs[1])
     log(eq0[:len(eq0)//2] + 1j*eq0[len(eq0)//2:])
-
+    print(vars)
     print('Incrementing g with complex k')
+    dv = 0
+    last = vars
     for i, g in enumerate(gs[1:]):
+        last = vars - dv
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
                    method='lm')
         vars = sol.x
-        ces, cws = unpack_vars(vars, Ne, Nw)
+        # dv = (vars - last)/dg
+        # vars = vars + dv
 
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
         if np.max(er) > 10**-12:
-            print('Highish errors:')
-            print('g = {}'.format(g))
-            print(np.max(er))
-        # Now adding newton method correction
-        # deriv = dvars(vars, last, dg, Ne, Nw)
-        # print(np.max(np.abs(deriv)))
-        # last = vars
-        # vars += deriv
-    ces, cws = unpack_vars(vars, Ne, Nw)
-    log('')
-    log('E_alpha:')
-    log(ces)
-    log('omega_beta:')
-    log(cws)
-    print('')
+            log('Highish errors:')
+            log('g = {}'.format(g))
+            log(np.max(er))
+
     print('Incrementing k to be real')
     scale = 1 - np.linspace(0, 1, 100)
     for i, s in enumerate(scale):
         ceta = k + s*kim
         eta = np.concatenate((ceta.real, ceta.imag))
-        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
+        sol = root(rgEqs, vars, args=(eta, Ne, Nw, gf),
                    method='lm')
         vars = sol.x
-        er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
+        er = np.abs(rgEqs(vars, eta, Ne, Nw, gf))
         if np.max(er) > 10**-12:
             log('Highish errors:')
             log('s = {}'.format(s))
             log(np.max(er))
+    last = vars
 
-    log('Final k values')
-    print(ceta)
     ces, cws = unpack_vars(vars, Ne, Nw)
 
-    print('This should be about zero:')
+    print('This should be about zero (final error):')
     print(np.max(er))
     return ces, cws
 
@@ -216,17 +204,13 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
     return R
 
 if __name__ == '__main__':
-    L = 4
-    Ne = 4
-    Nw = 4
-    gf = -0.6
+    L = int(input('Length: '))
+    Ne = int(input('Nup: '))
+    Nw = int(input('Ndown: '))
+    gf = float(input('G: '))
 
-
-
-
-    #ks = np.array(
-    #            [(2*i+1)*np.pi/L for i in range(L)],
-    #            dtype=np.complex128)
+    # ks = np.array(
+    #             [(2*i+1)*np.pi/L for i in range(L)])
     ks = 1.0*np.arange(L) + 1.0
     print('Ks:')
     print(ks)
@@ -247,31 +231,18 @@ if __name__ == '__main__':
     rge = np.sum(ks*rk)
 
     if L < 6:
-        from exact_qs_so5 import iom_dict, form_basis, hamiltonian_dict
+        from exact_qs_so5 import iom_dict, form_basis, ham_op
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
-        print('Checking all ioms')
-        for i in range(L):
-            iomd = iom_dict(L, Ne, Nw, gf, ks, k1=i)
-            Rk = quantum_operator(iomd, basis=basis)
-            es, v = Rk.eigh()
-            print('Smallest distance from ED result for {}th iom:'.format(i))
-            diffs = np.abs(rk[i]-es)
-            print(np.min(diffs))
-            print('This is the {}th ED ev'.format(np.argmin(diffs)))
 
-        hd = hamiltonian_dict(L, Ne, Nw, gf, ks)
-        H = quantum_operator(hd, basis=basis)
-        es, v = H.eigh()
-        for e in es:
-            if np.abs(e-rge) < 10**-6:
-                print('Close energy! Difference: ')
-                print(e-rge)
-        # print('Energies:')
-        # for i, e in enumerate(es):
-        #     if i == 0:
-        #         print(e)
-        #     elif es[i-1] != e:
-        #         print(e)
-        #     else:
-        #         print('Duplicate!')
+        ho = ham_op(L, gf, ks, basis)
+        e, v = ho.eigh()
+
+        print('Energy found:')
+        print(rge)
+        print('Smallest distance from ED result for GS energy:')
+        diffs = np.abs(e-rge)
+        print(np.min(diffs))
+        print('This is the {}th energy'.format(np.argmin(diffs)))
+        print('True low energies:')
+        print(e[:10])
