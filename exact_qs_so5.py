@@ -52,8 +52,7 @@ def casimir_dict(L, k1):
     return {'static': static}
 
 
-
-def hamiltonian_dict(L, Nup, Ndown, G, k, no_kin=False, trig=False):
+def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
     # k should include positive and negative values
     all_k = []
     ppairing = [] # spin 1 pairing

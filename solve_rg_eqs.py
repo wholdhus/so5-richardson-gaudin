@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.optimize import root, brenth
 
-VERBOSE=False
+VERBOSE=True
 
 def log(msg):
     if VERBOSE:
@@ -100,9 +100,9 @@ def find_extra_w(es, epsilon=10**-6):
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
     if double:
         ces = np.array([k[i//2] for i in range(Ne)], dtype=np.complex128)
-        # cws = np.array([k[i//2] for i in range(Nw)], dtype=np.complex128)
-        cws = np.zeros(Nw, dtype=np.complex128)
-        ces += 1j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
+        cws = np.array([k[i//2] for i in range(Nw)], dtype=np.complex128)
+        # cws = np.zeros(Nw, dtype=np.complex128)
+        ces += 1.8j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
         cws += -3.2j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
     else:
         ces = np.array(k[:Ne], dtype=np.complex128)
@@ -123,45 +123,43 @@ def dvars(vars, pvars, dg, Ne, Nw):
     return deriv
 
 
-def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01, first=None):
+def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
 
-    g1 = 0.0125*L
-    g1s = np.arange(0, g1, dg)
-    print(g1s)
-    g2 = 10*g1
-    if g2 < gf:
-        g2s = np.arange(g1, g2, 0.1*dg)
-        print(g2s)
-        g3s = np.arange(g2, gf, dg)
-        gs = np.concatenate((np.concatenate((g1s, g2s)), g3s))
+    g1s = 0.001
+    if gf > g1s*L:
+        g1 = g1s*L
+        g1s = np.arange(dg, g1, dg)
+        g2s = np.append(np.arange(g1, gf, dg), gf)
+    elif gf < -1*g1s*L:
+        g1 = -1*g1s*L
+        g1s = -1*np.linspace(dg, -1*g1, dg)
+        g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
     else:
-        gs = np.concatenate((g1s, np.arange(g1, gf, dg)))
-    print(gs)
-    kim = .1j*np.cos(np.pi*np.arange(L))
+        print('Woops: g too close to zero')
+        return
+    log('Paths for g:')
+    log(g1s)
+    log(g2s)
+    print('')
+    kim = .01j*dg*np.cos(np.pi*np.arange(L))
     # kim = np.zeros(L)
     ceta = k + kim
     eta = np.concatenate((ceta.real, ceta.imag))
 
-    ces, cws = g0_guess(L, Ne, Nw, k)
+    ces, cws = g0_guess(L, Ne, Nw, k, imscale=0.1*dg)
     log('Initial guesses:')
     log(ces)
     log(cws)
     vars = pack_vars(ces, cws)
-    # last = vars
     log('Eqs with initial guess:')
-    eq0 = rgEqs(vars, eta, Ne, Nw, gs[1])
+    eq0 = rgEqs(vars, eta, Ne, Nw, dg)
     log(eq0[:len(eq0)//2] + 1j*eq0[len(eq0)//2:])
-    print(vars)
-    print('Incrementing g with complex k')
-    dv = 0
-    last = vars
-    for i, g in enumerate(gs[1:]):
-        last = vars - dv
+    print('')
+    print('Incrementing g with complex k up to {}'.format(g1))
+    for i, g in enumerate(g1s[1:]):
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
                    method='lm')
         vars = sol.x
-        # dv = (vars - last)/dg
-        # vars = vars + dv
 
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
         if np.max(er) > 10**-12:
@@ -174,20 +172,31 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01, first=None):
     for i, s in enumerate(scale):
         ceta = k + s*kim
         eta = np.concatenate((ceta.real, ceta.imag))
-        sol = root(rgEqs, vars, args=(eta, Ne, Nw, gf),
+        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g1),
                    method='lm')
         vars = sol.x
-        er = np.abs(rgEqs(vars, eta, Ne, Nw, gf))
+        er = np.abs(rgEqs(vars, eta, Ne, Nw, g1))
         if np.max(er) > 10**-12:
             log('Highish errors:')
             log('s = {}'.format(s))
             log(np.max(er))
-    last = vars
+
+    print('Now doing the rest of g steps')
+    for i, g in enumerate(g2s):
+        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
+                   method='lm')
+        vars = sol.x
+        er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
+        if np.max(er) > 10**-12:
+            log('Highish errors:')
+            log('g = {}'.format(g))
+            log(np.max(er))
 
     ces, cws = unpack_vars(vars, Ne, Nw)
-
+    print('')
     print('This should be about zero (final error):')
     print(np.max(er))
+    print('')
     return ces, cws
 
 
@@ -208,13 +217,13 @@ if __name__ == '__main__':
     Ne = int(input('Nup: '))
     Nw = int(input('Ndown: '))
     gf = float(input('G: '))
+    dg = float(input('dg: '))
 
     # ks = np.array(
     #             [(2*i+1)*np.pi/L for i in range(L)])
-    ks = 1.0*np.arange(L) + 1.0
-    print('Ks:')
-    print(ks)
-    es, ws = solve_rgEqs(L, Ne, Nw, gf, ks)
+    ks = (1.0*np.arange(L) + 1.0)/L
+    es, ws = solve_rgEqs(L, Ne, Nw, gf, ks, dg=dg)
+    print('')
     print('Solution found:')
     print('e_alpha:')
     print(es)
