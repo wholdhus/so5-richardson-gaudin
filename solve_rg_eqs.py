@@ -141,7 +141,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     return vars, er
 
 
-def solve_rgEqs(dims, gf, k, dg=0.01, imscale=0.01):
+def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     L, Ne, Nw = dims
     g1s = 0.01*4/L
     if gf > g1s*L:
@@ -160,12 +160,12 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale=0.01):
     log(g2s)
     print('')
     # imscale=0.1*dg
-    kim = 1j*imscale*np.cos(np.pi*np.arange(L))
+    kim = 1j*imscale_k*np.cos(np.pi*np.arange(L))
     # kim = np.zeros(L)
     ceta = k + kim
     eta = np.concatenate((ceta.real, ceta.imag))
 
-    ces, cws = g0_guess(L, Ne, Nw, k, imscale=imscale)
+    ces, cws = g0_guess(L, Ne, Nw, k, imscale=imscale_v)
     log('Initial guesses:')
     log(ces)
     log(cws)
@@ -207,7 +207,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale=0.01):
             return
     print('')
     print('Removing the last bit of imaginary stuff')
-    vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, sf=1)
+    vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, steps=10, sf=1)
 
 
     ces, cws = unpack_vars(vars, Ne, Nw)
@@ -236,9 +236,8 @@ if __name__ == '__main__':
     Nw = int(input('Ndown: '))
     gf = float(input('G: '))
     dg = float(input('dg: '))
-    ims = float(input('Imscale: '))
-    if ims < 0:
-        ims = dg
+    imk = float(input('Scale of imaginary part for k: '))
+    imv = float(input('Same for variable guess: '))
 
     # ks = np.array(
     #             [(2*i+1)*np.pi/L for i in range(L)])
@@ -246,7 +245,7 @@ if __name__ == '__main__':
     dims = (L, Ne, Nw)
 
     ks = (1.0*np.arange(L) + 1.0)/L
-    es, ws = solve_rgEqs(dims, gf, ks, dg=dg, imscale=ims)
+    es, ws = solve_rgEqs(dims, gf, ks, dg=dg, imscale_k=imk, imscale_v=imv)
     print('')
     print('Solution found:')
     print('e_alpha:')
