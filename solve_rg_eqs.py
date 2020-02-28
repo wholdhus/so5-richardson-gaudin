@@ -125,7 +125,7 @@ def dvars(vars, pvars, dg, Ne, Nw):
 
 def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
 
-    g1s = 0.001
+    g1s = 0.01
     if gf > g1s*L:
         g1 = g1s*L
         g1s = np.arange(dg, g1, dg)
@@ -141,12 +141,13 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
     log(g1s)
     log(g2s)
     print('')
-    kim = .01j*dg*np.cos(np.pi*np.arange(L))
+    imscale=0.1*dg
+    kim = 1j*imscale*np.cos(np.pi*np.arange(L))
     # kim = np.zeros(L)
     ceta = k + kim
     eta = np.concatenate((ceta.real, ceta.imag))
 
-    ces, cws = g0_guess(L, Ne, Nw, k, imscale=0.1*dg)
+    ces, cws = g0_guess(L, Ne, Nw, k, imscale=imscale)
     log('Initial guesses:')
     log(ces)
     log(cws)
@@ -158,7 +159,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
     print('Incrementing g with complex k up to {}'.format(g1))
     for i, g in enumerate(g1s[1:]):
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
-                   method='lm')
+                   method='hybr')
         vars = sol.x
 
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
@@ -173,7 +174,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
         ceta = k + s*kim
         eta = np.concatenate((ceta.real, ceta.imag))
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g1),
-                   method='lm')
+                   method='hybr')
         vars = sol.x
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g1))
         if np.max(er) > 10**-12:
@@ -184,7 +185,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
-                   method='lm')
+                   method='hybr')
         vars = sol.x
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
         if np.max(er) > 10**-12:
@@ -240,12 +241,12 @@ if __name__ == '__main__':
     rge = np.sum(ks*rk)
 
     if L < 6:
-        from exact_qs_so5 import iom_dict, form_basis, ham_op
+        from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
         ho = ham_op(L, gf, ks, basis)
-        e, v = ho.eigh()
+        e, v = find_min_ev(ho, L, basis, n=10)
 
         print('Energy found:')
         print(rge)
