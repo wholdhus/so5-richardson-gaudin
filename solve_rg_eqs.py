@@ -104,6 +104,8 @@ def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
         # cws = np.zeros(Nw, dtype=np.complex128)
         ces += 1.8j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
         cws += -3.2j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+        #ces += 0.002*imscale*(-1)**np.arange(Ne)
+        # cws += 0.2*imscale
     else:
         ces = np.array(k[:Ne], dtype=np.complex128)
         # cws = (np.array(k[:Ne], dtype=np.complex128) - 0.25*k[0])/2
@@ -123,9 +125,9 @@ def dvars(vars, pvars, dg, Ne, Nw):
     return deriv
 
 
-def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
+def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01, imscale=0.01):
 
-    g1s = 0.01
+    g1s = 0.01*4/L
     if gf > g1s*L:
         g1 = g1s*L
         g1s = np.arange(dg, g1, dg)
@@ -141,7 +143,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
     log(g1s)
     log(g2s)
     print('')
-    imscale=0.1*dg
+    # imscale=0.1*dg
     kim = 1j*imscale*np.cos(np.pi*np.arange(L))
     # kim = np.zeros(L)
     ceta = k + kim
@@ -182,6 +184,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
             log('s = {}'.format(s))
             log(np.max(er))
 
+    eta = np.concatenate((k, np.zeros(L)))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
@@ -192,6 +195,9 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
+        if i > 10 and np.max(er) > 0.001:
+            print('This is too bad')
+            return
 
     ces, cws = unpack_vars(vars, Ne, Nw)
     print('')
@@ -219,23 +225,24 @@ if __name__ == '__main__':
     Nw = int(input('Ndown: '))
     gf = float(input('G: '))
     dg = float(input('dg: '))
+    ims = float(input('Imscale: '))
+    if ims < 0:
+        ims = dg
 
     # ks = np.array(
     #             [(2*i+1)*np.pi/L for i in range(L)])
     ks = (1.0*np.arange(L) + 1.0)/L
-    es, ws = solve_rgEqs(L, Ne, Nw, gf, ks, dg=dg)
+    es, ws = solve_rgEqs(L, Ne, Nw, gf, ks, dg=dg, imscale=ims)
     print('')
     print('Solution found:')
     print('e_alpha:')
     for e in es:
-        print(float(np.real(e)))
-        print('+ i * ')
-        print(float(np.imag(e)))
+        print('{} + I*{}'.format(float(np.real(e)), np.imag(e)))
+        print('')
     print('omega_beta')
     for e in ws:
-        print(float(np.real(e)))
-        print('+ i * ')
-        print(float(np.imag(e)))
+        print('{} + I*{}'.format(float(np.real(e)), np.imag(e)))
+        print('')
     rk = ioms(es, gf, ks)
     print('From RG, iom eigenvalues:')
     for r in rk:
