@@ -124,13 +124,29 @@ def dvars(vars, pvars, dg, Ne, Nw):
 
     return deriv
 
+def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
+    L, Ne, Nw = dims
+    scale = 1 - np.linspace(0, sf, steps)
+    for i, s in enumerate(scale):
+        ceta = k + s*im_k
+        eta = np.concatenate((ceta.real, ceta.imag))
+        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
+                   method='lm')
+        vars = sol.x
+        er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
+        if np.max(er) > 10**-10:
+            log('Highish errors:')
+            log('s = {}'.format(s))
+            log(np.max(er))
+    return vars, er
 
-def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01, imscale=0.01):
 
+def solve_rgEqs(dims, gf, k, dg=0.01, imscale=0.01):
+    L, Ne, Nw = dims
     g1s = 0.01*4/L
     if gf > g1s*L:
         g1 = g1s*L
-        g1s = np.arange(dg, g1, dg)
+        g1s = np.arange(dg, g1, 0.5*dg)
         g2s = np.append(np.arange(g1, gf, dg), gf)
     elif gf < -1*g1s*L:
         g1 = -1*g1s*L
@@ -165,39 +181,34 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01, imscale=0.01):
         vars = sol.x
 
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
-        if np.max(er) > 10**-10:
+        if np.max(er) > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
 
+    print('')
     print('Incrementing k to be real')
-    scale = 1 - np.linspace(0, 1, 100)
-    for i, s in enumerate(scale):
-        ceta = k + s*kim
-        eta = np.concatenate((ceta.real, ceta.imag))
-        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g1),
-                   method='lm')
-        vars = sol.x
-        er = np.abs(rgEqs(vars, eta, Ne, Nw, g1))
-        if np.max(er) > 10**-12:
-            log('Highish errors:')
-            log('s = {}'.format(s))
-            log(np.max(er))
-
-    eta = np.concatenate((k, np.zeros(L)))
+    vars, er = increment_im_k(vars, dims, g, k, kim, sf=0.99)
+    print('')
+    ceta = k + 0.01*kim
+    eta = np.concatenate((ceta.real, ceta.imag))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
                    method='lm')
         vars = sol.x
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
-        if np.max(er) > 10**-12:
+        if np.max(er) > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
         if i > 10 and np.max(er) > 0.001:
             print('This is too bad')
             return
+    print('')
+    print('Removing the last bit of imaginary stuff')
+    vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, sf=1)
+
 
     ces, cws = unpack_vars(vars, Ne, Nw)
     print('')
@@ -231,8 +242,11 @@ if __name__ == '__main__':
 
     # ks = np.array(
     #             [(2*i+1)*np.pi/L for i in range(L)])
+
+    dims = (L, Ne, Nw)
+
     ks = (1.0*np.arange(L) + 1.0)/L
-    es, ws = solve_rgEqs(L, Ne, Nw, gf, ks, dg=dg, imscale=ims)
+    es, ws = solve_rgEqs(dims, gf, ks, dg=dg, imscale=ims)
     print('')
     print('Solution found:')
     print('e_alpha:')
@@ -259,7 +273,6 @@ if __name__ == '__main__':
 
         ho = ham_op(L, gf, ks, basis)
         e, v = find_min_ev(ho, L, basis, n=10)
-
         print('Energy found:')
         print(rge)
         print('Smallest distance from ED result for GS energy:')
