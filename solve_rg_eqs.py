@@ -159,11 +159,11 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
     print('Incrementing g with complex k up to {}'.format(g1))
     for i, g in enumerate(g1s[1:]):
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
-                   method='hybr')
+                   method='lm')
         vars = sol.x
 
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
-        if np.max(er) > 10**-12:
+        if np.max(er) > 10**-10:
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
@@ -174,7 +174,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
         ceta = k + s*kim
         eta = np.concatenate((ceta.real, ceta.imag))
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g1),
-                   method='hybr')
+                   method='lm')
         vars = sol.x
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g1))
         if np.max(er) > 10**-12:
@@ -185,7 +185,7 @@ def solve_rgEqs(L, Ne, Nw, gf, k, dg=0.01):
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
         sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
-                   method='hybr')
+                   method='lm')
         vars = sol.x
         er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
         if np.max(er) > 10**-12:
@@ -227,10 +227,15 @@ if __name__ == '__main__':
     print('')
     print('Solution found:')
     print('e_alpha:')
-    print(es)
+    for e in es:
+        print(float(np.real(e)))
+        print('+ i * ')
+        print(float(np.imag(e)))
     print('omega_beta')
-    print(ws)
-    print('')
+    for e in ws:
+        print(float(np.real(e)))
+        print('+ i * ')
+        print(float(np.imag(e)))
     rk = ioms(es, gf, ks)
     print('From RG, iom eigenvalues:')
     for r in rk:
