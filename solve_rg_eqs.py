@@ -16,6 +16,28 @@ def reZ(x,y,u,v): # Re(Z(z1,z2)), z1 = x+iy, x2 = u+iv
 def imZ(x,y,u,v):
     return ((x*u-y*v)*(v-y)+(y*u+x*v)*(x-u))/((x-u)**2+(y-v)**2)
 
+
+def dZ_rr(x,y,u,v):
+    # derivative of real part with respect to (2nd) real part
+    return (((u+v-x)*x +(v-u)*y - y^2)(v*y + u*(x+y)-x*(v+x) -y^2)
+            )/((u-x)**2+(v-y)**2)**2
+
+
+def dZ_ii(x,y,u,v):
+    return dZ_rr(x,y,u,v)
+
+
+def dZ_ri(x,y,u,v):
+    # d Re(Z(z1, z2))/d Im(z2)
+    return (2*(v*x-u*y)*(u-x)*x + (v-y)*v)
+            )/(((u-x)**2+(v-y)**2)**2
+
+
+def dZ_ir(x,y,u,v):
+    # d Im(Z(z1,z2))/d Re(z2)
+    return -1*dZ_ri(x,y,u,v)
+
+
 def trigZ(x, y):
     return 1./np.tan(x-y)
 
@@ -76,6 +98,103 @@ def rgEqs(vars, k, Ne, Nw, g, c1=1.0):
                     )
     eqs = np.concatenate((set1_r, set1_i, set2_r, set2_i))
     return eqs
+
+
+def rg_jac(vars, k, g, dims):
+    """
+    ASSUMING NE = NW!
+
+    f1 is function on RHS of first set of equations
+    f2 is function on RHS of second set of equations
+    """
+    L, Ne, Nw = dims
+    N = Ne
+    M = len(vars)
+    jac = np.zeros((M, M))
+
+    ers = vars[:Ne]
+    eis = vars[Ne:2*Ne]
+    wrs = vars[2*Ne:2*Ne+Nw]
+    wis = vars[2*Ne+Nw:]
+
+    kr = k[:L]
+    ki = k[L:]
+
+    for i in range(N):
+        for j in range(N):
+            ls = np.arange(N) != j
+            if i == j:
+                er = ers[j]
+                eis = eis[i]
+                wr = wrs[j]
+                wi = wis[j]
+                # Re(f1), Re(e)
+                jac[i, j] = g*(2*np.sum(dZ_rr(ers[ls], eis[ls], er, ei)
+                               -np.sum(dZ_rr(wrs, wis, er, ei)))
+                               -np.sum(dZ_rr(krs, kis, er, ei))
+                               )
+                # Re(f1), Im(e)
+                jac[i, j+N] = g*(2*np.sum(dZ_ri(ers[ls], eis[ls], er, ei)
+                                  -np.sum(dZ_ri(wrs, wis, er, ei)))
+                                  -np.sum(dZ_ri(krs, kis, er, ei))
+                                  )
+                # Im(f1), Re(e)
+                # -1 * previous by properties of Z!
+                jac[i+N, j] = -1*jac[i, j+N]
+                # Im(f1), Im(e)
+                # same as dRe(f)/dRe(e)
+                jac[i+N, j+N] = jac[i, j]
+
+                # Re(f2), Re(w)
+                jac[i+2*N, j+2*N] = g*(np.sum(dZ_rr(wrs[ls], wis[ls], wr, wi))
+                                       -np.sum(dZ_rr(ers, eis, wr, wi)))
+                # Re(f2), Im(w)
+                jac[i+2*N, j+3*N] = g*(np.sum(dZ_ri(wrs[ls], wis[ls], wr, wi))
+                                       -np.sum(dZ_ri(ers, eis, wr, wi)))
+                # Im(f2), Re(w)
+                jac[i+3*N, j+2*N] = -1*jac[i+2*N, j+3*N]
+                # Im(f2), Im(w)
+                jac[i+3*N, j+3*N] = jac[i+2*N, j+2*N]
+
+            else: # i != j
+                # Re(f1), Re(e)
+                jac[i, j] = -2*g*dZ_rr(ers[j], eis[j], ers[i], eis[i])
+                # Re(f1), Im(e)
+                jac[i, j+N] = -2*g*dZ_ri(ers[j], eis[j], ers[i], eis[i])
+                # Im(f1), Re(e)
+                jac[i+N, j] = -1*jac[i, j+N]
+                # Im(f1), Im(e)
+                jac[i+N, j+N] = jac[i,j]
+
+                # Re(f2), Re(w)
+                jac[i+2*N, j+2*N] = -1*g*dZ_rr(wrs[j], wis[j], wrs[i], wis[i])
+                # Re(f1), Im(w)
+                jac[i+2*N, j+3*N] = -1*g*dZ_ri(wrs[j], wis[j], wrs[i], wis[i])
+                # Im(f1), Re(w)
+                jac[i+3*N, j+2*N] = -1*jac[i, j+3*N]
+                # Im(f1), Im(w)
+                jac[i+3*N, j+3*N] = -1*jac[i+2*N, j+2*N]
+            # Cross derivatives (f1 / w and f2 / e)
+            # take the same form when i == j, i != j
+            # Re(f1), Re(w)
+            jac[i, j+2*N] = g*dZ_rr(wrs[j], wi[j], er[i], ei[i])
+            # Re(f1), Im(w)
+            jac[i, j+3*N] = g*dZ_ri(wr[j], wi, er, ei)
+            # Im(f1), Re(w)
+            jac[i+N, j+2*N] = -1*jac[i, j+3*N]
+            # Im(f1), Im(w)
+            jac[i+N, j+3*N] = jac[i, j+2*N]
+
+            # Re(f2), Re(e)
+            jac[i+2*N, j] = g*dZ_rr(er, ei, wr, wi)
+            # Re(f2), Im(e)
+            jac[i+2*N, j+N] = g*dZ_ri(er, ei, wr, wi)
+            # Im(f2), Re(e)
+            jac[i+3*N, j] = -1*jac[i+2*N,j+N]
+            # Im(f2), Im(e)
+            jac[i+3*N, j+N] = jac[i+2*N, j]
+
+    return jac
 
 
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
