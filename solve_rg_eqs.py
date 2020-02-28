@@ -77,22 +77,25 @@ def rgEqs(vars, k, Ne, Nw, g, c1=1.0):
     eqs = np.concatenate((set1_r, set1_i, set2_r, set2_i))
     return eqs
 
+
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
     if double:
-        ces = np.array([k[i//2] for i in range(Ne)], dtype=np.complex128)
-        cws = np.array([k[i//2] for i in range(Nw)], dtype=np.complex128)
+        er = np.array([k[i//2] for i in range(Ne)])
+        wr = np.array([k[i//2] for i in range(Nw)])
         # cws = np.zeros(Nw, dtype=np.complex128)
-        ces += 1.8j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
-        cws += -3.2j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+        ei = 1.8*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
+        wi = -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
         #ces += 0.002*imscale*(-1)**np.arange(Ne)
         # cws += 0.2*imscale
     else:
-        ces = np.array(k[:Ne], dtype=np.complex128)
+        er = np.array(k[:Ne])
+        ei = np.zeros(Ne)
         # cws = (np.array(k[:Ne], dtype=np.complex128) - 0.25*k[0])/2
-        cws = np.zeros(Nw, dtype=np.complex128)
-        cws += 1j*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+        wr = np.zeros(Nw)
+        wi = imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
 
-    return ces, cws
+    vars = np.concatenate((er, ei, wr, wi))
+    return vars
 
 
 def dvars(vars, pvars, dg, Ne, Nw):
@@ -103,6 +106,7 @@ def dvars(vars, pvars, dg, Ne, Nw):
     deriv = pack_vars(de, dw)
 
     return deriv
+
 
 def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     L, Ne, Nw = dims
@@ -123,7 +127,6 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
 
 def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
 
-
     L, Ne, Nw = dims
     g1s = 0.01*4/L
     if gf > g1s*L:
@@ -142,27 +145,22 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     log(g2s)
     print('')
     # imscale=0.1*dg
-    kim = 1j*imscale_k*np.cos(np.pi*np.arange(L))
+    kim = imscale_k*np.cos(np.pi*np.arange(L))
     # kim = np.zeros(L)
-    ceta = k + kim
-    eta = np.concatenate((ceta.real, ceta.imag))
+    kc = np.concatenate((k, kim))
 
-    ces, cws = g0_guess(L, Ne, Nw, k, imscale=imscale_v)
+    vars = g0_guess(L, Ne, Nw, k, imscale=imscale_v)
     log('Initial guesses:')
-    log(ces)
-    log(cws)
-    vars = pack_vars(ces, cws)
-    log('Eqs with initial guess:')
-    eq0 = rgEqs(vars, eta, Ne, Nw, dg)
-    log(eq0[:len(eq0)//2] + 1j*eq0[len(eq0)//2:])
+    es, ws = unpack_vars(vars, Ne, Nw)
+    print(es, ws)
     print('')
     print('Incrementing g with complex k up to {}'.format(g1))
     for i, g in enumerate(g1s[1:]):
-        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
+        sol = root(rgEqs, vars, args=(kc, Ne, Nw, g),
                    method='lm')
         vars = sol.x
 
-        er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
+        er = np.abs(rgEqs(vars, kc, Ne, Nw, g))
         if np.max(er) > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
@@ -172,14 +170,13 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     print('Incrementing k to be real')
     vars, er = increment_im_k(vars, dims, g, k, kim, sf=0.99)
     print('')
-    ceta = k + 0.01*kim
-    eta = np.concatenate((ceta.real, ceta.imag))
+    kc = np.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
-        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
+        sol = root(rgEqs, vars, args=(kc, Ne, Nw, g),
                    method='lm')
         vars = sol.x
-        er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
+        er = np.abs(rgEqs(vars, kc, Ne, Nw, g))
         if np.max(er) > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
