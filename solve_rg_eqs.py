@@ -10,6 +10,11 @@ def log(msg):
 def rationalZ(x, y):
     return x*y/(x-y)
 
+def reZ(x,y,u,v): # Re(Z(z1,z2)), z1 = x+iy, x2 = u+iv
+    return ((x*u-y*v)*(x-u)+(y*u+x*v)*(y-v))/((x-u)**2+(y-v)**2)
+
+def imZ(x,y,u,v):
+    return ((x*u-y*v)*(v-y)+(y*u+x*v)*(x-u))/((x-u)**2+(y-v)**2)
 
 def trigZ(x, y):
     return 1./np.tan(x-y)
@@ -32,70 +37,45 @@ def pack_vars(ces, cws):
     return vars
 
 
-def rgEqs(vars, etas, Ne, Nw, g, c1=1.0):
+def rgEqs(vars, k, Ne, Nw, g, c1=1.0):
 
     Zf = rationalZ
-    L = len(etas)//2
-    cetas = etas[:L] + 1j*etas[L:]
-    ces, cws = unpack_vars(vars, Ne, Nw)
+    L = len(k)//2
 
-    set1 = np.zeros(Ne, dtype=np.complex128)
-    set2 = np.zeros(Nw, dtype=np.complex128)
+    kr = k[:L]
+    ki = k[L:]
 
-    for i, e in enumerate(ces):
-        # If I leave out a factor of 2 this solves nicely?
-        # Mathematica seems to suggest the factor of 2 was an error?
-        set1[i] = (g*(2*Zf(ces[np.arange(Ne) != i], e).sum()
-                      - Zf(cws, e).sum() - Zf(cetas, e).sum())
+    ers = vars[:Ne]
+    eis = vars[Ne:2*Ne]
+    wrs = vars[2*Ne:2*Ne+Nw]
+    wis = vars[2*Ne+Nw:]
+
+    set1_r = np.zeros(Ne)
+    set1_i = np.zeros(Ne)
+    set2_r = np.zeros(Nw)
+    set2_i = np.zeros(Nw)
+
+    for i, er in enumerate(ers):
+        ei = eis[i]
+        js = np.arange(Ne) != i
+        set1_r[i] = (g*(2*reZ(ers[js], eis[js], er, ei).sum()
+                      - reZ(wrs, wis, er, ei).sum()
+                      - reZ(kr, ki, er, ei).sum())
                    + c1)
-
-    for i, w in enumerate(cws):
-        set2[i] = Zf(cws[np.arange(Nw) != i], w).sum() - Zf(ces, w).sum()
-
-    eqs = np.concatenate((set1, set2))
-    return np.concatenate((eqs.real, eqs.imag))
-
-
-def rgEqs1(es, ws, etas, g):
-    Zf = rationalZ
-    Ne = len(es)//2
-    Nw = len(ws)//2
-    L = len(etas)//2
-    cetas = etas[:L] + 1j*etas[L:]
-    ces = es[:Ne] + 1j*es[Ne:]
-    cws = ws[:Nw] + 1j*ws[Nw:]
-    eqs = np.zeros(Ne, dtype=complex)
-    for i, e in enumerate(ces):
-        eqs[i] = g*(
-                2*Zf(ces[np.arange(Ne) != i], e).sum()
-                - Zf(cws, e).sum() - Zf(cetas, e).sum()) + 1.
-    return np.concatenate((eqs.real, eqs.imag))
-
-
-def rgEqs2(ws, es):
-    Zf = rationalZ
-    Ne = len(es)//2
-    Nw = len(ws)//2
-    ces = es[:Ne] + 1j*es[Ne:]
-    cws = ws[:Nw] + 1j*ws[Nw:]
-    eqs = np.zeros(Nw, dtype=complex)
-    for i, w in enumerate(cws):
-        eqs[i] = (Zf(cws[np.arange(Nw) != i], w).sum()
-                  - Zf(ces, w).sum())
-    return np.concatenate((eqs.real, eqs.imag))
-
-
-def extra_eq(w, es):
-    eq = rationalZ(es, w).sum()
-    return eq
-
-
-def find_extra_w(es, epsilon=10**-6):
-    below = np.min(es) - epsilon
-    above = np.min(es) + epsilon
-    w = brenth(extra_eq, below, above, args=(es))
-    return w
-
+        set1_i[i] = (g*(2*imZ(ers[js], eis[js], er, ei).sum()
+                      - imZ(wrs, wis, er, ei).sum()
+                      - imZ(kr, ki, er, ei).sum()))
+    for i, wr in enumerate(wrs):
+        wi = wis[i]
+        js = np.arange(Nw) != i
+        set2_r[i] = g*(reZ(wrs[js], wis[js], wr, wi).sum()
+                     - reZ(ers, eis, wr, wi).sum()
+                    )
+        set2_i[i] = g*(imZ(wrs[js], wis[js], wr, wi).sum()
+                     - imZ(ers, eis, wr, wi).sum()
+                    )
+    eqs = np.concatenate((set1_r, set1_i, set2_r, set2_i))
+    return eqs
 
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
     if double:
@@ -142,6 +122,8 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
 
 
 def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
+
+
     L, Ne, Nw = dims
     g1s = 0.01*4/L
     if gf > g1s*L:
@@ -231,6 +213,12 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
     return R
 
 if __name__ == '__main__':
+
+    print('Checking Zs')
+    print(rationalZ(3+4j, 2-8j))
+    print(reZ(3,4,2,-8))
+    print(imZ(3,4,2,-8))
+
     L = int(input('Length: '))
     Ne = int(input('Nup: '))
     Nw = int(input('Ndown: '))
@@ -271,7 +259,7 @@ if __name__ == '__main__':
         basis = form_basis(2*L, Ne, Nw)
 
         ho = ham_op(L, gf, ks, basis)
-        e, v = find_min_ev(ho, L, basis, n=10)
+        e, v = find_min_ev(ho, L, basis, n=100)
         print('Energy found:')
         print(rge)
         print('Smallest distance from ED result for GS energy:')
