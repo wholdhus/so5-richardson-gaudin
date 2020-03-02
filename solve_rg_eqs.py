@@ -19,7 +19,7 @@ def imZ(x,y,u,v):
 
 def dZ_rr(x,y,u,v):
     # derivative of real part with respect to (2nd) real part
-    return (((u+v-x)*x +(v-u)*y - y^2)(v*y + u*(x+y)-x*(v+x) -y^2)
+    return (((u+v-x)*x +(v-u)*y - y**2)*(v*y + u*(x+y)-x*(v+x) -y**2)
             )/((u-x)**2+(v-y)**2)**2
 
 
@@ -29,8 +29,8 @@ def dZ_ii(x,y,u,v):
 
 def dZ_ri(x,y,u,v):
     # d Re(Z(z1, z2))/d Im(z2)
-    return (2*(v*x-u*y)*(u-x)*x + (v-y)*v)
-            )/(((u-x)**2+(v-y)**2)**2
+    return (2*(v*x-u*y)*((u-x)*x + (v-y)*y)
+            )/(((u-x)**2+(v-y)**2)**2)
 
 
 def dZ_ir(x,y,u,v):
@@ -59,7 +59,10 @@ def pack_vars(ces, cws):
     return vars
 
 
-def rgEqs(vars, k, Ne, Nw, g, c1=1.0):
+def rgEqs(vars, k, g, dims):
+    c1 = 1
+
+    L, Ne, Nw = dims
 
     Zf = rationalZ
     L = len(k)//2
@@ -109,34 +112,41 @@ def rg_jac(vars, k, g, dims):
     """
     L, Ne, Nw = dims
     N = Ne
-    M = len(vars)
-    jac = np.zeros((M, M))
+    jac = np.zeros((len(vars), len(vars)))
 
     ers = vars[:Ne]
     eis = vars[Ne:2*Ne]
     wrs = vars[2*Ne:2*Ne+Nw]
     wis = vars[2*Ne+Nw:]
 
-    kr = k[:L]
-    ki = k[L:]
+    krs = k[:L]
+    kis = k[L:]
+
+    # print('Variables:')
+    # print('g = {}'.format(g))
+    # print('e_alpha = ')
+    # print(ers)
+    # print(eis)
+    # print('w_beta = ')
+    # print(wrs)
+    # print(wis)
+    # print('k = ')
+    # print(krs)
+    # print(kis)
 
     for i in range(N):
         for j in range(N):
-            ls = np.arange(N) != j
             if i == j:
-                er = ers[j]
-                eis = eis[i]
-                wr = wrs[j]
-                wi = wis[j]
+                ls = np.arange(N) != j
                 # Re(f1), Re(e)
-                jac[i, j] = g*(2*np.sum(dZ_rr(ers[ls], eis[ls], er, ei)
-                               -np.sum(dZ_rr(wrs, wis, er, ei)))
-                               -np.sum(dZ_rr(krs, kis, er, ei))
+                jac[i, j] = g*(2*np.sum(dZ_rr(ers[ls], eis[ls], ers[i], eis[i]))
+                               -np.sum(dZ_rr(wrs, wis, ers[i], eis[i]))
+                               -np.sum(dZ_rr(krs, kis, ers[i], eis[i]))
                                )
                 # Re(f1), Im(e)
-                jac[i, j+N] = g*(2*np.sum(dZ_ri(ers[ls], eis[ls], er, ei)
-                                  -np.sum(dZ_ri(wrs, wis, er, ei)))
-                                  -np.sum(dZ_ri(krs, kis, er, ei))
+                jac[i, j+N] = g*(2*np.sum(dZ_ri(ers[ls], eis[ls], ers[i], eis[i]))
+                                  -np.sum(dZ_ri(wrs, wis, ers[i], eis[i]))
+                                  -np.sum(dZ_ri(krs, kis, ers[i], eis[i]))
                                   )
                 # Im(f1), Re(e)
                 # -1 * previous by properties of Z!
@@ -146,11 +156,11 @@ def rg_jac(vars, k, g, dims):
                 jac[i+N, j+N] = jac[i, j]
 
                 # Re(f2), Re(w)
-                jac[i+2*N, j+2*N] = g*(np.sum(dZ_rr(wrs[ls], wis[ls], wr, wi))
-                                       -np.sum(dZ_rr(ers, eis, wr, wi)))
+                jac[i+2*N, j+2*N] = g*(np.sum(dZ_rr(wrs[ls], wis[ls], wrs[i], wis[i]))
+                                       -np.sum(dZ_rr(ers, eis, wrs[i], wis[i])))
                 # Re(f2), Im(w)
-                jac[i+2*N, j+3*N] = g*(np.sum(dZ_ri(wrs[ls], wis[ls], wr, wi))
-                                       -np.sum(dZ_ri(ers, eis, wr, wi)))
+                jac[i+2*N, j+3*N] = g*(np.sum(dZ_ri(wrs[ls], wis[ls], wrs[i], wis[i]))
+                                       -np.sum(dZ_ri(ers, eis, wrs[i], wis[i])))
                 # Im(f2), Re(w)
                 jac[i+3*N, j+2*N] = -1*jac[i+2*N, j+3*N]
                 # Im(f2), Im(w)
@@ -164,7 +174,7 @@ def rg_jac(vars, k, g, dims):
                 # Im(f1), Re(e)
                 jac[i+N, j] = -1*jac[i, j+N]
                 # Im(f1), Im(e)
-                jac[i+N, j+N] = jac[i,j]
+                jac[i+N, j+N] = jac[i, j]
 
                 # Re(f2), Re(w)
                 jac[i+2*N, j+2*N] = -1*g*dZ_rr(wrs[j], wis[j], wrs[i], wis[i])
@@ -177,18 +187,18 @@ def rg_jac(vars, k, g, dims):
             # Cross derivatives (f1 / w and f2 / e)
             # take the same form when i == j, i != j
             # Re(f1), Re(w)
-            jac[i, j+2*N] = g*dZ_rr(wrs[j], wi[j], er[i], ei[i])
+            jac[i, j+2*N] = g*dZ_rr(wrs[j], wis[j], ers[i], eis[i])
             # Re(f1), Im(w)
-            jac[i, j+3*N] = g*dZ_ri(wr[j], wi, er, ei)
+            jac[i, j+3*N] = g*dZ_ri(wrs[j], wis[j], ers[i], eis[i])
             # Im(f1), Re(w)
             jac[i+N, j+2*N] = -1*jac[i, j+3*N]
             # Im(f1), Im(w)
             jac[i+N, j+3*N] = jac[i, j+2*N]
 
             # Re(f2), Re(e)
-            jac[i+2*N, j] = g*dZ_rr(er, ei, wr, wi)
+            jac[i+2*N, j] = g*dZ_rr(ers[j], eis[j], wrs[i], wis[i])
             # Re(f2), Im(e)
-            jac[i+2*N, j+N] = g*dZ_ri(er, ei, wr, wi)
+            jac[i+2*N, j+N] = g*dZ_ri(ers[j], eis[j], wrs[i], wis[i])
             # Im(f2), Re(e)
             jac[i+3*N, j] = -1*jac[i+2*N,j+N]
             # Im(f2), Im(e)
@@ -231,12 +241,11 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     L, Ne, Nw = dims
     scale = 1 - np.linspace(0, sf, steps)
     for i, s in enumerate(scale):
-        ceta = k + s*im_k
-        eta = np.concatenate((ceta.real, ceta.imag))
-        sol = root(rgEqs, vars, args=(eta, Ne, Nw, g),
-                   method='lm')
+        kc = np.concatenate((k, s*im_k))
+        sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', jac=rg_jac)
         vars = sol.x
-        er = np.abs(rgEqs(vars, eta, Ne, Nw, g))
+        er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-10:
             log('Highish errors:')
             log('s = {}'.format(s))
@@ -275,11 +284,11 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     print('')
     print('Incrementing g with complex k up to {}'.format(g1))
     for i, g in enumerate(g1s[1:]):
-        sol = root(rgEqs, vars, args=(kc, Ne, Nw, g),
-                   method='lm')
+        sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', jac=rg_jac)
         vars = sol.x
 
-        er = np.abs(rgEqs(vars, kc, Ne, Nw, g))
+        er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
@@ -292,10 +301,10 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     kc = np.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
-        sol = root(rgEqs, vars, args=(kc, Ne, Nw, g),
-                   method='lm')
+        sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', jac=rg_jac)
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, Ne, Nw, g))
+        er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
@@ -329,6 +338,10 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
     return R
 
 if __name__ == '__main__':
+
+    r = rg_jac(np.arange(1,9), np.arange(1,9)/8, 1, (4, 2, 2))
+    print('Jacobian: ')
+    print(r)
 
     print('Checking Zs')
     print(rationalZ(3+4j, 2-8j))
