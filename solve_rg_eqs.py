@@ -56,46 +56,6 @@ def rgEqs(vars, etas, Ne, Nw, g, c1=1.0):
     return np.concatenate((eqs.real, eqs.imag))
 
 
-def rgEqs1(es, ws, etas, g):
-    Zf = rationalZ
-    Ne = len(es)//2
-    Nw = len(ws)//2
-    L = len(etas)//2
-    cetas = etas[:L] + 1j*etas[L:]
-    ces = es[:Ne] + 1j*es[Ne:]
-    cws = ws[:Nw] + 1j*ws[Nw:]
-    eqs = np.zeros(Ne, dtype=complex)
-    for i, e in enumerate(ces):
-        eqs[i] = g*(
-                2*Zf(ces[np.arange(Ne) != i], e).sum()
-                - Zf(cws, e).sum() - Zf(cetas, e).sum()) + 1.
-    return np.concatenate((eqs.real, eqs.imag))
-
-
-def rgEqs2(ws, es):
-    Zf = rationalZ
-    Ne = len(es)//2
-    Nw = len(ws)//2
-    ces = es[:Ne] + 1j*es[Ne:]
-    cws = ws[:Nw] + 1j*ws[Nw:]
-    eqs = np.zeros(Nw, dtype=complex)
-    for i, w in enumerate(cws):
-        eqs[i] = (Zf(cws[np.arange(Nw) != i], w).sum()
-                  - Zf(ces, w).sum())
-    return np.concatenate((eqs.real, eqs.imag))
-
-
-def extra_eq(w, es):
-    eq = rationalZ(es, w).sum()
-    return eq
-
-
-def find_extra_w(es, epsilon=10**-6):
-    below = np.min(es) - epsilon
-    above = np.min(es) + epsilon
-    w = brenth(extra_eq, below, above, args=(es))
-    return w
-
 
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
     if double:
