@@ -167,38 +167,49 @@ def rg_jac(vars, k, g, dims):
                 jac[i+3*N, j+3*N] = jac[i+2*N, j+2*N]
 
             else: # i != j
+                """
+                For the following, there is a factor of -1 and
+                index order is switched in the calls to the
+                derivative functions, because dZ(x,y)/dx = - dZ(y,x)/dx
+                and the derivative functions are calculated w.r.t. the
+                real and imaginary parts of the second variable
+                """
                 # Re(f1), Re(e)
-                jac[i, j] = -2*dZ_rr(ers[j], eis[j], ers[i], eis[i])
+                jac[i, j] = -2*dZ_rr(ers[i], eis[i], ers[j], eis[j])
                 # Re(f1), Im(e)
-                jac[i, j+N] = -2*dZ_ri(ers[j], eis[j], ers[i], eis[i])
+                jac[i, j+N] = -2*dZ_ri(ers[i], eis[i], ers[j], eis[j])
                 # Im(f1), Re(e)
                 jac[i+N, j] = -1*jac[i, j+N]
                 # Im(f1), Im(e)
                 jac[i+N, j+N] = jac[i, j]
 
                 # Re(f2), Re(w)
-                jac[i+2*N, j+2*N] = -1*dZ_rr(wrs[j], wis[j], wrs[i], wis[i])
-                # Re(f1), Im(w)
-                jac[i+2*N, j+3*N] = -1*dZ_ri(wrs[j], wis[j], wrs[i], wis[i])
-                # Im(f1), Re(w)
-                jac[i+3*N, j+2*N] = -1*jac[i, j+3*N]
-                # Im(f1), Im(w)
-                jac[i+3*N, j+3*N] = -1*jac[i+2*N, j+2*N]
-            # Cross derivatives (f1 / w and f2 / e)
-            # take the same form when i == j, i != j
+                jac[i+2*N, j+2*N] = -1*dZ_rr(wrs[i], wis[i], wrs[j], wis[j])
+                # Re(f2), Im(w)
+                jac[i+2*N, j+3*N] = -1*dZ_ri(wrs[i], wis[i], wrs[j], wis[j])
+                # Im(f2), Re(w)
+                jac[i+3*N, j+2*N] = -1*jac[i+2*N, j+3*N]
+                # Im(f2), Im(w)
+                jac[i+3*N, j+3*N] = jac[i+2*N, j+2*N]
+            """
+            Cross derivatives (f1 / w and f2 / e) take the same
+            form when i == j, i != j.
+            Again, there is a factor of -1 and switched variables because these
+            derivatives are w.r.t. the first complex variable.
+            """
             # Re(f1), Re(w)
-            jac[i, j+2*N] = dZ_rr(wrs[j], wis[j], ers[i], eis[i])
+            jac[i, j+2*N] = dZ_rr(ers[i], eis[i], wrs[j], wis[j])
             # Re(f1), Im(w)
-            jac[i, j+3*N] = dZ_ri(wrs[j], wis[j], ers[i], eis[i])
+            jac[i, j+3*N] = dZ_ri(ers[i], eis[i], wrs[j], wis[j])
             # Im(f1), Re(w)
             jac[i+N, j+2*N] = -1*jac[i, j+3*N]
             # Im(f1), Im(w)
             jac[i+N, j+3*N] = jac[i, j+2*N]
 
             # Re(f2), Re(e)
-            jac[i+2*N, j] = dZ_rr(ers[j], eis[j], wrs[i], wis[i])
+            jac[i+2*N, j] = dZ_rr(wrs[i], wis[i], ers[j], eis[j])
             # Re(f2), Im(e)
-            jac[i+2*N, j+N] = dZ_ri(ers[j], eis[j], wrs[i], wis[i])
+            jac[i+2*N, j+N] = dZ_ri(wrs[i], wis[i], ers[j], eis[j])
             # Im(f2), Re(e)
             jac[i+3*N, j] = -1*jac[i+2*N,j+N]
             # Im(f2), Im(e)
@@ -241,6 +252,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     L, Ne, Nw = dims
     scale = 1 - np.linspace(0, sf, steps)
     for i, s in enumerate(scale):
+
         kc = np.concatenate((k, s*im_k))
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac)
@@ -250,6 +262,9 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
             log('Highish errors:')
             log('s = {}'.format(s))
             log(np.max(er))
+        if np.max(er) > 0.001:
+            print('This is too bad')
+            return
     return vars, er
 
 
@@ -282,8 +297,8 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     es, ws = unpack_vars(vars, Ne, Nw)
     print(es, ws)
     print('')
-    print('Incrementing g with complex k up to {}'.format(g1))
-    for i, g in enumerate(g1s[1:]):
+    print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
+    for i, g in enumerate(g1s):
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac)
         vars = sol.x
@@ -293,6 +308,9 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
+        if np.max(er) > 0.001:
+            print('This is too bad')
+            return
 
     print('')
     print('Incrementing k to be real')
@@ -309,7 +327,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
-        if i > 10 and np.max(er) > 0.001:
+        if np.max(er) > 0.001:
             print('This is too bad')
             return
     print('')
@@ -339,9 +357,13 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
 
 if __name__ == '__main__':
 
-    r = rg_jac(np.arange(1,9), np.arange(1,9)/8, 1, (4, 2, 2))
-    print('Jacobian: ')
-    print(r)
+    r = rg_jac(np.arange(1,9), np.arange(1,9)/8, -10, (4, 2, 2))
+    print('First row of Jacobian: ')
+    print(r[0])
+    print('First column of Jacobian: ')
+    print(r[:, 0])
+    print('Diagonal entries of the Jacobian: ')
+    print(np.diagonal(r))
 
     print('Checking Zs')
     print(rationalZ(3+4j, 2-8j))
