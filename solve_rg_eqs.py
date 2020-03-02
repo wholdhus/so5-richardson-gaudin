@@ -1,7 +1,9 @@
 import numpy as np
-from scipy.optimize import root, brenth
+from scipy.optimize import root
 
 VERBOSE=True
+TOL=10**-12
+MAXIT=1000
 
 def log(msg):
     if VERBOSE:
@@ -255,7 +257,9 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
 
         kc = np.concatenate((k, s*im_k))
         sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac)
+                   method='lm', jac=rg_jac,
+                   options={'maxiter': MAXIT,
+                            'xtol': TOL})
         vars = sol.x
         er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-10:
@@ -300,7 +304,9 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
         sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac)
+                   method='lm', jac=rg_jac,
+                   options={'maxiter': MAXIT,
+                            'xtol': TOL})
         vars = sol.x
 
         er = np.abs(rgEqs(vars, kc, g, dims))
@@ -320,7 +326,9 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
         sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac)
+                   method='lm', jac=rg_jac,
+                   options={'maxiter': MAXIT,
+                            'xtol': TOL})
         vars = sol.x
         er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-9:
