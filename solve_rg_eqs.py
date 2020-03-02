@@ -83,24 +83,24 @@ def rgEqs(vars, k, g, dims):
     for i, er in enumerate(ers):
         ei = eis[i]
         js = np.arange(Ne) != i
-        set1_r[i] = (g*(2*reZ(ers[js], eis[js], er, ei).sum()
+        set1_r[i] = ((2*reZ(ers[js], eis[js], er, ei).sum()
                       - reZ(wrs, wis, er, ei).sum()
                       - reZ(kr, ki, er, ei).sum())
-                   + c1)
-        set1_i[i] = (g*(2*imZ(ers[js], eis[js], er, ei).sum()
+                   + c1/g)
+        set1_i[i] = ((2*imZ(ers[js], eis[js], er, ei).sum()
                       - imZ(wrs, wis, er, ei).sum()
                       - imZ(kr, ki, er, ei).sum()))
     for i, wr in enumerate(wrs):
         wi = wis[i]
         js = np.arange(Nw) != i
-        set2_r[i] = g*(reZ(wrs[js], wis[js], wr, wi).sum()
+        set2_r[i] = (reZ(wrs[js], wis[js], wr, wi).sum()
                      - reZ(ers, eis, wr, wi).sum()
                     )
-        set2_i[i] = g*(imZ(wrs[js], wis[js], wr, wi).sum()
+        set2_i[i] = (imZ(wrs[js], wis[js], wr, wi).sum()
                      - imZ(ers, eis, wr, wi).sum()
                     )
     eqs = np.concatenate((set1_r, set1_i, set2_r, set2_i))
-    return eqs
+    return g*eqs
 
 
 def rg_jac(vars, k, g, dims):
@@ -139,12 +139,12 @@ def rg_jac(vars, k, g, dims):
             if i == j:
                 ls = np.arange(N) != j
                 # Re(f1), Re(e)
-                jac[i, j] = g*(2*np.sum(dZ_rr(ers[ls], eis[ls], ers[i], eis[i]))
+                jac[i, j] = (2*np.sum(dZ_rr(ers[ls], eis[ls], ers[i], eis[i]))
                                -np.sum(dZ_rr(wrs, wis, ers[i], eis[i]))
                                -np.sum(dZ_rr(krs, kis, ers[i], eis[i]))
                                )
                 # Re(f1), Im(e)
-                jac[i, j+N] = g*(2*np.sum(dZ_ri(ers[ls], eis[ls], ers[i], eis[i]))
+                jac[i, j+N] = (2*np.sum(dZ_ri(ers[ls], eis[ls], ers[i], eis[i]))
                                   -np.sum(dZ_ri(wrs, wis, ers[i], eis[i]))
                                   -np.sum(dZ_ri(krs, kis, ers[i], eis[i]))
                                   )
@@ -156,10 +156,10 @@ def rg_jac(vars, k, g, dims):
                 jac[i+N, j+N] = jac[i, j]
 
                 # Re(f2), Re(w)
-                jac[i+2*N, j+2*N] = g*(np.sum(dZ_rr(wrs[ls], wis[ls], wrs[i], wis[i]))
+                jac[i+2*N, j+2*N] = (np.sum(dZ_rr(wrs[ls], wis[ls], wrs[i], wis[i]))
                                        -np.sum(dZ_rr(ers, eis, wrs[i], wis[i])))
                 # Re(f2), Im(w)
-                jac[i+2*N, j+3*N] = g*(np.sum(dZ_ri(wrs[ls], wis[ls], wrs[i], wis[i]))
+                jac[i+2*N, j+3*N] = (np.sum(dZ_ri(wrs[ls], wis[ls], wrs[i], wis[i]))
                                        -np.sum(dZ_ri(ers, eis, wrs[i], wis[i])))
                 # Im(f2), Re(w)
                 jac[i+3*N, j+2*N] = -1*jac[i+2*N, j+3*N]
@@ -168,18 +168,18 @@ def rg_jac(vars, k, g, dims):
 
             else: # i != j
                 # Re(f1), Re(e)
-                jac[i, j] = -2*g*dZ_rr(ers[j], eis[j], ers[i], eis[i])
+                jac[i, j] = -2*dZ_rr(ers[j], eis[j], ers[i], eis[i])
                 # Re(f1), Im(e)
-                jac[i, j+N] = -2*g*dZ_ri(ers[j], eis[j], ers[i], eis[i])
+                jac[i, j+N] = -2*dZ_ri(ers[j], eis[j], ers[i], eis[i])
                 # Im(f1), Re(e)
                 jac[i+N, j] = -1*jac[i, j+N]
                 # Im(f1), Im(e)
                 jac[i+N, j+N] = jac[i, j]
 
                 # Re(f2), Re(w)
-                jac[i+2*N, j+2*N] = -1*g*dZ_rr(wrs[j], wis[j], wrs[i], wis[i])
+                jac[i+2*N, j+2*N] = -1*dZ_rr(wrs[j], wis[j], wrs[i], wis[i])
                 # Re(f1), Im(w)
-                jac[i+2*N, j+3*N] = -1*g*dZ_ri(wrs[j], wis[j], wrs[i], wis[i])
+                jac[i+2*N, j+3*N] = -1*dZ_ri(wrs[j], wis[j], wrs[i], wis[i])
                 # Im(f1), Re(w)
                 jac[i+3*N, j+2*N] = -1*jac[i, j+3*N]
                 # Im(f1), Im(w)
@@ -187,24 +187,24 @@ def rg_jac(vars, k, g, dims):
             # Cross derivatives (f1 / w and f2 / e)
             # take the same form when i == j, i != j
             # Re(f1), Re(w)
-            jac[i, j+2*N] = g*dZ_rr(wrs[j], wis[j], ers[i], eis[i])
+            jac[i, j+2*N] = dZ_rr(wrs[j], wis[j], ers[i], eis[i])
             # Re(f1), Im(w)
-            jac[i, j+3*N] = g*dZ_ri(wrs[j], wis[j], ers[i], eis[i])
+            jac[i, j+3*N] = dZ_ri(wrs[j], wis[j], ers[i], eis[i])
             # Im(f1), Re(w)
             jac[i+N, j+2*N] = -1*jac[i, j+3*N]
             # Im(f1), Im(w)
             jac[i+N, j+3*N] = jac[i, j+2*N]
 
             # Re(f2), Re(e)
-            jac[i+2*N, j] = g*dZ_rr(ers[j], eis[j], wrs[i], wis[i])
+            jac[i+2*N, j] = dZ_rr(ers[j], eis[j], wrs[i], wis[i])
             # Re(f2), Im(e)
-            jac[i+2*N, j+N] = g*dZ_ri(ers[j], eis[j], wrs[i], wis[i])
+            jac[i+2*N, j+N] = dZ_ri(ers[j], eis[j], wrs[i], wis[i])
             # Im(f2), Re(e)
             jac[i+3*N, j] = -1*jac[i+2*N,j+N]
             # Im(f2), Im(e)
             jac[i+3*N, j+N] = jac[i+2*N, j]
 
-    return jac
+    return g*(jac)
 
 
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
@@ -256,12 +256,12 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
 def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
 
     L, Ne, Nw = dims
-    g1s = 0.01*4/L
-    if gf > g1s*L:
-        g1 = g1s*L
+    g1sc = 0.01*4/L
+    if gf > g1sc*L:
+        g1 = g1sc*L
         g1s = np.arange(dg, g1, 0.5*dg)
         g2s = np.append(np.arange(g1, gf, dg), gf)
-    elif gf < -1*g1s*L:
+    elif gf < -1*g1sc*L:
         g1 = -1*g1s*L
         g1s = -1*np.linspace(dg, -1*g1, dg)
         g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
