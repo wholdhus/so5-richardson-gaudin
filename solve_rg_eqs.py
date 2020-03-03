@@ -217,7 +217,7 @@ def rg_jac(vars, k, g, dims):
             # Im(f2), Im(e)
             jac[i+3*N, j+N] = jac[i+2*N, j]
 
-    return g*(jac)
+    return g*jac
 
 
 def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
@@ -314,7 +314,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
-        if np.max(er) > 0.001:
+        if np.max(er) > 0.001 and i > 3:
             print('This is too bad')
             return
 
@@ -382,10 +382,14 @@ if __name__ == '__main__':
     Ne = int(input('Nup: '))
     Nw = int(input('Ndown: '))
     gf = float(input('G: '))
-    dg = float(input('dg: '))
-    imk = float(input('Scale of imaginary part for k: '))
-    imv = float(input('Same for variable guess: '))
 
+    # dg = float(input('dg: '))
+    # imk = float(input('Scale of imaginary part for k: '))
+    # imv = float(input('Same for variable guess: '))
+
+    dg = 0.001*8/L
+    imk = .5*dg/(Ne+Nw)
+    imv = .5*dg/(Ne+Nw)
     # ks = np.array(
     #             [(2*i+1)*np.pi/L for i in range(L)])
 
