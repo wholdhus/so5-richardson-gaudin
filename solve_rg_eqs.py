@@ -1,9 +1,19 @@
 import numpy as np
-from scipy.optimize import root
+from scipy.optimize import root, minimize
 
 VERBOSE=True
-TOL=10**-12
-MAXIT=1000
+TOL=10**-8
+MAXIT=10000
+FACTOR=100
+
+lmd = {'maxiter': MAXIT,
+       'xtol': TOL,
+       'ftol': TOL, 'factor':FACTOR}
+
+hybrd = {'maxfev': MAXIT,
+         'xtol': TOL,
+         'factor': FACTOR}
+
 
 def log(msg):
     if VERBOSE:
@@ -17,7 +27,6 @@ def reZ(x,y,u,v): # Re(Z(z1,z2)), z1 = x+iy, x2 = u+iv
 
 def imZ(x,y,u,v):
     return ((x*u-y*v)*(v-y)+(y*u+x*v)*(x-u))/((x-u)**2+(y-v)**2)
-
 
 def dZ_rr(x,y,u,v):
     # derivative of real part with respect to (2nd) real part
@@ -103,6 +112,9 @@ def rgEqs(vars, k, g, dims):
                     )
     eqs = np.concatenate((set1_r, set1_i, set2_r, set2_i))
     return g*eqs
+
+def rg_scalar(vars, k, g, dims):
+    return np.sum(np.abs(rgEqs(vars, k, g, dims)))
 
 
 def rg_jac(vars, k, g, dims):
@@ -220,13 +232,20 @@ def rg_jac(vars, k, g, dims):
     return g*jac
 
 
-def g0_guess(L, Ne, Nw, k, imscale=0.01):
-    er = np.array([k[i//2] for i in range(Ne)])
-    wr = np.array([k[i//2] for i in range(Nw)])
-    # cws = np.zeros(Nw, dtype=np.complex128)
+def g0_guess(L, Ne, Nw, kc, imscale=0.01):
+    k_r = kc[:L]
+    k_i = kc[L:]
+    double_e = np.arange(Ne)//2
+    double_w = np.arange(Nw)//2
+    er = k_r[double_e]
+    wr = k_r[double_w]
     ei = 1.8*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
     wi = -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
-
+    # ei += k_i[double_e]
+    # wi += k_i[double_w]
+    if Nw%2 == 1: # Nw is odd
+        wi[-1] = 0
+        wr[-1] = 0
     vars = np.concatenate((er, ei, wr, wi))
     return vars
 
@@ -248,9 +267,8 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
 
         kc = np.concatenate((k, s*im_k))
         sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac,
-                   options={'maxiter': MAXIT,
-                            'xtol': TOL})
+                   method='lm', jac=rg_jac, options=lmd)
+
         vars = sol.x
         er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-10:
@@ -263,62 +281,93 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     return vars, er
 
 
-def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
+def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001):
 
     L, Ne, Nw = dims
     g1sc = 0.01*4/L
     if gf > g1sc*L:
         g1 = g1sc*L
-        g1s = np.arange(dg, g1, 0.5*dg)
+        g1s = np.arange(g0, g1, 0.5*dg)
         g2s = np.append(np.arange(g1, gf, dg), gf)
     elif gf < -1*g1sc*L:
         g1 = -1*g1s*L
-        g1s = -1*np.linspace(dg, -1*g1, dg)
+        g1s = -1*np.linspace(g0, -1*g1, dg)
         g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
     else:
-        print('Woops: g too close to zero')
+        print('Woops: abs(gf) < abs(g1)')
         return
     log('Paths for g:')
     log(g1s)
     log(g2s)
     print('')
     # imscale=0.1*dg
-    kim = imscale_k*np.cos(np.pi*np.arange(L))
-    # kim = np.zeros(L)
+    # kim = imscale_k*np.cos(np.pi*np.arange(L))
+    kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
 
-    vars = g0_guess(L, Ne, Nw, k, imscale=imscale_v)
+    vars = g0_guess(L, Ne, Nw, kc, imscale=imscale_v)
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    print(es, ws)
+    es -= g0*np.arange(1, Ne+1)
+    ws -= g0*np.arange(1, Nw+1)
+    if Nw%2==1:
+        ws[-1] = 0
+    print(es)
+    print(ws)
+
+    vars = pack_vars(es, ws)
     print('')
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
-
+        log('g = {}'.format(g))
+        prev_vars = vars
         sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac,
-                   options={'maxiter': MAXIT,
-                            'xtol': TOL})
+                   method='lm', jac=rg_jac, options=lmd)
         vars = sol.x
+        er = np.abs(rgEqs(vars, kc, g, dims))
+        tries = 0
+        while np.max(er) > 10**-7:
+            tries += 1
+            if tries > 10**3:
+                log('Stopping')
+                return
+            log('{}th try, g = {}'.format(tries, g))
+            log('Failed: {}'.format(sol.message))
+            log('Error: {}'.format(np.max(er)))
+            log('Retrying with new vars:')
+            vars = prev_vars + 2*imscale_v*(np.random.rand(len(vars))-0.5)
+            es, ws = unpack_vars(vars, Ne, Nw)
+            log(es)
+            log(ws)
+            sol = root(rgEqs, vars, args=(kc, g, dims),
+                       method='lm', jac=rg_jac, options=lmd)
+            vars = sol.x
+            er = np.abs(rgEqs(vars, kc, g, dims))
 
+        vars = sol.x
         er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
             log(np.max(er))
-        if np.max(er) > 0.001 and i > 3:
+        if np.max(er) > 0.001 and i > 1:
             print('This is too bad')
             return
         ces, cws = unpack_vars(vars, Ne, Nw)
-        if i%5 == 0:
-            log('g = {}'.format(g))
-            log('k:')
-            log(k + 1j*kim)
-            log('etas:')
-            log(ces)
-            log('omegas:')
-            log(cws)
-            input('Enter to continue')
+        # if i == 0:
+        #     log('Status: {}'.format(sol.status))
+        #     log('Msg: {}'.format(sol.message))
+        #     log('Iterations: {}'.format(sol.nfev))
+        #     # log('Error (according to solver): {}'.format(sol.maxcv))
+        #     log('g = {}'.format(g))
+        #     log('er: {}'.format(np.max(er)))
+        #     log('k:')
+        #     log(k + 1j*kim)
+        #     log('es:')
+        #     log(ces)
+        #     log('omegas:')
+        #     log(cws)
+        #     input('Enter to continue')
     print('')
     print('Incrementing k to be real')
     vars, er = increment_im_k(vars, dims, g, k, kim, sf=0.99)
@@ -327,9 +376,9 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
         sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac,
-                   options={'maxiter': MAXIT,
-                            'xtol': TOL})
+                   method='lm', jac=rg_jac, options=lmd)
+
+
         vars = sol.x
         er = np.abs(rgEqs(vars, kc, g, dims))
         if np.max(er) > 10**-9:
@@ -388,16 +437,18 @@ if __name__ == '__main__':
     # imk = float(input('Scale of imaginary part for k: '))
     # imv = float(input('Same for variable guess: '))
 
-    dg = 0.001*8/L
-    imk = .5*dg/(Ne+Nw)
-    imv = .5*dg/(Ne+Nw)
-    # ks = np.array(
-    #             [(2*i+1)*np.pi/L for i in range(L)])
+    # dg = 0.001*8/L
+    dg = 0.01
+    g0 = .1*dg
+    # imk = .5*dg/(Ne+Nw)
+    imk = g0
+    imv = imk
+
 
     dims = (L, Ne, Nw)
 
     ks = (1.0*np.arange(L) + 1.0)/L
-    es, ws = solve_rgEqs(dims, gf, ks, dg=dg, imscale_k=imk, imscale_v=imv)
+    es, ws = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
     print('')
     print('Solution found:')
     print('e_alpha:')
