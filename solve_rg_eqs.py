@@ -220,21 +220,12 @@ def rg_jac(vars, k, g, dims):
     return g*jac
 
 
-def g0_guess(L, Ne, Nw, k, imscale=0.01, double=True):
-    if double:
-        er = np.array([k[i//2] for i in range(Ne)])
-        wr = np.array([k[i//2] for i in range(Nw)])
-        # cws = np.zeros(Nw, dtype=np.complex128)
-        ei = 1.8*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
-        wi = -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
-        #ces += 0.002*imscale*(-1)**np.arange(Ne)
-        # cws += 0.2*imscale
-    else:
-        er = np.array(k[:Ne])
-        ei = np.zeros(Ne)
-        # cws = (np.array(k[:Ne], dtype=np.complex128) - 0.25*k[0])/2
-        wr = np.zeros(Nw)
-        wi = imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+def g0_guess(L, Ne, Nw, k, imscale=0.01):
+    er = np.array([k[i//2] for i in range(Ne)])
+    wr = np.array([k[i//2] for i in range(Nw)])
+    # cws = np.zeros(Nw, dtype=np.complex128)
+    ei = 1.8*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
+    wi = -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
 
     vars = np.concatenate((er, ei, wr, wi))
     return vars
@@ -303,6 +294,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
     print('')
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
+
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac,
                    options={'maxiter': MAXIT,
@@ -317,7 +309,16 @@ def solve_rgEqs(dims, gf, k, dg=0.01, imscale_k=0.01, imscale_v=0.001):
         if np.max(er) > 0.001 and i > 3:
             print('This is too bad')
             return
-
+        ces, cws = unpack_vars(vars, Ne, Nw)
+        if i%5 == 0:
+            log('g = {}'.format(g))
+            log('k:')
+            log(k + 1j*kim)
+            log('etas:')
+            log(ces)
+            log('omegas:')
+            log(cws)
+            input('Enter to continue')
     print('')
     print('Incrementing k to be real')
     vars, er = increment_im_k(vars, dims, g, k, kim, sf=0.99)
