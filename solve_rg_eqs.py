@@ -1,4 +1,5 @@
 import numpy
+import pandas
 from scipy.optimize import root, minimize
 from scipy.special import binom
 from traceback import print_exc
@@ -326,6 +327,7 @@ def root_threads(prev_vars, im_v, kc, g, dims):
                     print_exc()
 
 def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200):
+    L, Ne, Nw = dims
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac, options=lmd)
@@ -396,7 +398,9 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
     return R
 
 
-def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001):
+def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
+                imscale_v=0.001):
+
 
     L, Ne, Nw = dims
     g1sc = 0.001*4/L
@@ -487,11 +491,16 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
 
 
     ces, cws = unpack_vars(vars, Ne, Nw)
-    print('')
-    print('This should be about zero (final error):')
-    print(er)
-    print('')
-    return ces, cws, varss, g2s
+
+
+    output_df = pandas.DataFrame({})
+    output_df['g'] = g2s
+    for n in range(Ne):
+        output_df['Re(e_{})'.format(n)] = varss[n, :]
+        output_df['Im(e_{})'.format(n)] = varss[n+Ne, :]
+        output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
+        output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
+    return ces, cws, output_df, varss
 
 
 def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
@@ -506,7 +515,7 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
             R[i] += -1*g*numpy.sum(Zkk) + 1.0
     return R
 
-def calculate_energies(varss, gs, ks, Ne):
+def calculate_energies(vars, gs, ks, Ne):
     energies = numpy.zeros(len(gs))
     for i, g in enumerate(gs):
         R = ioms(varss[:Ne, i], g, ks)
@@ -551,7 +560,7 @@ if __name__ == '__main__':
     dims = (L, Ne, Nw)
 
     ks = (1.0*numpy.arange(L) + 1.0)/L
-    es, ws, varss, gs = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
+    es, ws, output_df, varss = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
     print('')
     print('Solution found:')
     print('e_alpha:')
@@ -563,9 +572,9 @@ if __name__ == '__main__':
         print('{} + I*{}'.format(float(numpy.real(e)), numpy.imag(e)))
         print('')
 
-    energies = calculate_energies(varss, gs, ks, Ne)
+    energies = calculate_energies(varss, output_df['g'], ks, Ne)
 
-    plt.scatter(gs, energies)
+    plt.scatter(output_df['g'], energies)
     plt.show()
 
     rge = energies[-1]
