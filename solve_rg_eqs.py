@@ -1,11 +1,22 @@
-import numpy as np
-from scipy.optimize import root
+import numpy
+import pandas
+from scipy.optimize import root, minimize
 from scipy.special import binom
+from traceback import print_exc
+
+import concurrent.futures
+import multiprocessing
+
 
 VERBOSE=True
-TOL=10**-8
-MAXIT=10000
+FORCE_GS=True
+TOL=10**-10
+TOL2=10**-7 # there are plenty of spurious minima around 10**-5
+MAXIT=0 # let's use the default value
 FACTOR=100
+# JOBS = multiprocessing.cpu_count()
+JOBS = 20
+
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -51,7 +62,7 @@ def dZ_ir(x,y,u,v):
 
 
 def trigZ(x, y):
-    return 1./np.tan(x-y)
+    return 1./numpy.tan(x-y)
 
 
 def unpack_vars(vars, Ne, Nw):
@@ -65,9 +76,9 @@ def unpack_vars(vars, Ne, Nw):
 def pack_vars(ces, cws):
     # Takes separate, complex vectors
     # Combines them into variable vector format
-    es = np.concatenate((ces.real, ces.imag))
-    ws = np.concatenate((cws.real, cws.imag))
-    vars = np.concatenate((es, ws))
+    es = numpy.concatenate((ces.real, ces.imag))
+    ws = numpy.concatenate((cws.real, cws.imag))
+    vars = numpy.concatenate((es, ws))
     return vars
 
 
@@ -87,14 +98,14 @@ def rgEqs(vars, k, g, dims):
     wrs = vars[2*Ne:2*Ne+Nw]
     wis = vars[2*Ne+Nw:]
 
-    set1_r = np.zeros(Ne)
-    set1_i = np.zeros(Ne)
-    set2_r = np.zeros(Nw)
-    set2_i = np.zeros(Nw)
+    set1_r = numpy.zeros(Ne)
+    set1_i = numpy.zeros(Ne)
+    set2_r = numpy.zeros(Nw)
+    set2_i = numpy.zeros(Nw)
 
     for i, er in enumerate(ers):
         ei = eis[i]
-        js = np.arange(Ne) != i
+        js = numpy.arange(Ne) != i
         set1_r[i] = ((2*reZ(ers[js], eis[js], er, ei).sum()
                       - reZ(wrs, wis, er, ei).sum()
                       - reZ(kr, ki, er, ei).sum())
@@ -104,18 +115,18 @@ def rgEqs(vars, k, g, dims):
                       - imZ(kr, ki, er, ei).sum()))
     for i, wr in enumerate(wrs):
         wi = wis[i]
-        js = np.arange(Nw) != i
+        js = numpy.arange(Nw) != i
         set2_r[i] = (reZ(wrs[js], wis[js], wr, wi).sum()
                      - reZ(ers, eis, wr, wi).sum()
                     )
         set2_i[i] = (imZ(wrs[js], wis[js], wr, wi).sum()
                      - imZ(ers, eis, wr, wi).sum()
                     )
-    eqs = np.concatenate((set1_r, set1_i, set2_r, set2_i))
+    eqs = numpy.concatenate((set1_r, set1_i, set2_r, set2_i))
     return g*eqs
 
 def rg_scalar(vars, k, g, dims):
-    return np.sum(np.abs(rgEqs(vars, k, g, dims)))
+    return numpy.sum(abs(rgEqs(vars, k, g, dims)))
 
 
 def rg_jac(vars, k, g, dims):
@@ -127,7 +138,7 @@ def rg_jac(vars, k, g, dims):
     """
     L, Ne, Nw = dims
     N = Ne
-    jac = np.zeros((len(vars), len(vars)))
+    jac = numpy.zeros((len(vars), len(vars)))
 
     ers = vars[:Ne]
     eis = vars[Ne:2*Ne]
@@ -137,31 +148,19 @@ def rg_jac(vars, k, g, dims):
     krs = k[:L]
     kis = k[L:]
 
-    # print('Variables:')
-    # print('g = {}'.format(g))
-    # print('e_alpha = ')
-    # print(ers)
-    # print(eis)
-    # print('w_beta = ')
-    # print(wrs)
-    # print(wis)
-    # print('k = ')
-    # print(krs)
-    # print(kis)
-
     for i in range(N):
         for j in range(N):
             if i == j:
-                ls = np.arange(N) != j
+                ls = numpy.arange(N) != j
                 # Re(f1), Re(e)
-                jac[i, j] = (2*np.sum(dZ_rr(ers[ls], eis[ls], ers[i], eis[i]))
-                               -np.sum(dZ_rr(wrs, wis, ers[i], eis[i]))
-                               -np.sum(dZ_rr(krs, kis, ers[i], eis[i]))
+                jac[i, j] = (2*numpy.sum(dZ_rr(ers[ls], eis[ls], ers[i], eis[i]))
+                               -numpy.sum(dZ_rr(wrs, wis, ers[i], eis[i]))
+                               -numpy.sum(dZ_rr(krs, kis, ers[i], eis[i]))
                                )
                 # Re(f1), Im(e)
-                jac[i, j+N] = (2*np.sum(dZ_ri(ers[ls], eis[ls], ers[i], eis[i]))
-                                  -np.sum(dZ_ri(wrs, wis, ers[i], eis[i]))
-                                  -np.sum(dZ_ri(krs, kis, ers[i], eis[i]))
+                jac[i, j+N] = (2*numpy.sum(dZ_ri(ers[ls], eis[ls], ers[i], eis[i]))
+                                  -numpy.sum(dZ_ri(wrs, wis, ers[i], eis[i]))
+                                  -numpy.sum(dZ_ri(krs, kis, ers[i], eis[i]))
                                   )
                 # Im(f1), Re(e)
                 # -1 * previous by properties of Z!
@@ -171,11 +170,11 @@ def rg_jac(vars, k, g, dims):
                 jac[i+N, j+N] = jac[i, j]
 
                 # Re(f2), Re(w)
-                jac[i+2*N, j+2*N] = (np.sum(dZ_rr(wrs[ls], wis[ls], wrs[i], wis[i]))
-                                       -np.sum(dZ_rr(ers, eis, wrs[i], wis[i])))
+                jac[i+2*N, j+2*N] = (numpy.sum(dZ_rr(wrs[ls], wis[ls], wrs[i], wis[i]))
+                                       -numpy.sum(dZ_rr(ers, eis, wrs[i], wis[i])))
                 # Re(f2), Im(w)
-                jac[i+2*N, j+3*N] = (np.sum(dZ_ri(wrs[ls], wis[ls], wrs[i], wis[i]))
-                                       -np.sum(dZ_ri(ers, eis, wrs[i], wis[i])))
+                jac[i+2*N, j+3*N] = (numpy.sum(dZ_ri(wrs[ls], wis[ls], wrs[i], wis[i]))
+                                       -numpy.sum(dZ_ri(ers, eis, wrs[i], wis[i])))
                 # Im(f2), Re(w)
                 jac[i+3*N, j+2*N] = -1*jac[i+2*N, j+3*N]
                 # Im(f2), Im(w)
@@ -236,18 +235,18 @@ def rg_jac(vars, k, g, dims):
 def g0_guess(L, Ne, Nw, kc, imscale=0.01):
     k_r = kc[:L]
     k_i = kc[L:]
-    double_e = np.arange(Ne)//2
-    double_w = np.arange(Nw)//2
+    double_e = numpy.arange(Ne)//2
+    double_w = numpy.arange(Nw)//2
     er = k_r[double_e]
     wr = k_r[double_w]
-    ei = 1.8*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
-    wi = -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+    ei = 1.8*imscale*numpy.array([((i+2)//2)*(-1)**i for i in range(Ne)])
+    wi = -3.2*imscale*numpy.array([((i+2)//2)*(-1)**i for i in range(Nw)])
     # ei += k_i[double_e]
     # wi += k_i[double_w]
     if Nw%2 == 1: # Nw is odd
         wi[-1] = 0
         wr[-1] = 0
-    vars = np.concatenate((er, ei, wr, wi))
+    vars = numpy.concatenate((er, ei, wr, wi))
     return vars
 
 
@@ -261,17 +260,82 @@ def dvars(vars, pvars, dg, Ne, Nw):
     return deriv
 
 
+def root_thread_job(vars, kc, g, dims):
+    L, Ne, Nw = dims
+    sol = root(rgEqs, vars, args=(kc, g, dims),
+               method='lm', jac=rg_jac, options=lmd)
+    vars = sol.x
+    er = max(abs(rgEqs(vars, kc, g, dims)))
+    es, ws = unpack_vars(vars, Ne, Nw)
+    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
+        # 1log('Omega = 0 solution! Rerunning.')
+        er = 1
+    return sol, vars, er
+
+
+def root_threads(prev_vars, im_v, kc, g, dims):
+        L, Ne, Nw = dims
+        with concurrent.futures.ProcessPoolExecutor(max_workers=JOBS) as executor:
+            future_results = [executor.submit(root_thread_job,
+                                              prev_vars + 2*im_v*(numpy.random.rand(len(prev_vars))-0.5),
+                                              kc, g, dims)
+                              for n in range(JOBS)]
+            concurrent.futures.wait(future_results)
+            for res in future_results:
+                try:
+                    yield res.result()
+                except:
+                    print_exc()
+
+def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200):
+    L, Ne, Nw = dims
+    prev_vars = vars
+    sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', jac=rg_jac, options=lmd)
+    vars = sol.x
+    er = max(abs(rgEqs(vars, kc, g, dims)))
+    es, ws = unpack_vars(vars, Ne, Nw)
+    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
+        log('Omega = 0 solution! Rerunning.')
+        er = 1
+    tries = 0
+
+    sols = [-999 for i in range(JOBS)]
+    ers = [-887 for i in range(JOBS)]
+
+
+    while er > TOL2:
+        if tries > max_steps:
+            log('Stopping')
+            return
+        log('{}th try, g = {}'.format(tries, g))
+        # log('Failed: {}'.format(sol.message))
+        log('Smallest error from last set: {}'.format(er))
+
+        log('Retrying with {} sets of new vars:'.format(JOBS))
+        for i, r in enumerate(root_threads(prev_vars, im_v, kc, g, dims)):
+            # print(r)
+            sols[i], _, ers[i] = r
+        er = min(ers)
+        sol = sols[numpy.argmin(ers)]
+        vars = sol.x
+        log('Best error: {}'.format(max(abs(rgEqs(vars, kc, g, dims)))))
+
+        tries += JOBS
+    return sol
+
 def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     L, Ne, Nw = dims
-    scale = 1 - np.linspace(0, sf, steps)
+    scale = 1 - numpy.linspace(0, sf, steps)
     for i, s in enumerate(scale):
 
-        kc = np.concatenate((k, s*im_k))
-        sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
+        kc = numpy.concatenate((k, s*im_k))
+        sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
+                        max_steps=200)
+
 
         vars = sol.x
-        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-10:
             log('Highish errors:')
             log('s = {}'.format(s))
@@ -282,35 +346,52 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     return vars, er
 
 
-def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001):
+def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
+    L = len(ks)
+    R = numpy.zeros(L, dtype=numpy.complex128)
+    for i, k in enumerate(ks):
+        Zke = Zf(k, es)
+        R[i] = g*numpy.sum(Zke)
+        if extra_bits:
+            otherks = ks[numpy.arange(L) != i]
+            Zkk = Zf(k, otherks)
+            R[i] += -1*g*numpy.sum(Zkk) + 1.0
+    return R
+
+
+def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
+                imscale_v=0.001):
+
 
     L, Ne, Nw = dims
-    g1sc = 0.01*4/L
+    g1sc = 0.001*4/L
     if gf > g1sc*L:
         g1 = g1sc*L
-        g1s = np.arange(g0, g1, 0.5*dg)
-        g2s = np.append(np.arange(g1, gf, dg), gf)
+        g1s = numpy.arange(g0, g1, 0.5*dg)
+        g2s = numpy.append(numpy.arange(g1, gf, dg), gf)
     elif gf < -1*g1sc*L:
         g1 = -1*g1s*L
-        g1s = -1*np.linspace(g0, -1*g1, dg)
-        g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
+        g1s = -1*numpy.linspace(g0, -1*g1, dg)
+        g2s = numpy.append(-1*numpy.arange(-1*g1, -1*gf, dg), gf)
     else:
         print('Woops: abs(gf) < abs(g1)')
         return
-    log('Paths for g:')
-    log(g1s)
-    log(g2s)
-    print('')
+    # log('Paths for g:')
+    # log(g1s)
+    # log(g2s)
     # imscale=0.1*dg
-    # kim = imscale_k*np.cos(np.pi*np.arange(L))
-    kim = imscale_k*(-1)**np.arange(L)
-    kc = np.concatenate((k, kim))
+    # kim = imscale_k*numpy.cos(numpy.pi*numpy.arange(L))
+    kim = imscale_k*(-1)**numpy.arange(L)
+    kc = numpy.concatenate((k, kim))
 
     vars = g0_guess(L, Ne, Nw, kc, imscale=imscale_v)
+
+    varss = numpy.zeros((len(vars), len(g2s)))
+
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    es -= g0*np.arange(1, Ne+1)
-    ws -= g0*np.arange(1, Nw+1)
+    es -= g0*numpy.arange(1, Ne+1)/Ne
+    ws -= g0*numpy.arange(1, Nw+1)/Nw
     if Nw%2==1:
         ws[-1] = 0
     print(es)
@@ -320,47 +401,10 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     print('')
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
-        log('g = {}'.format(g))
-        prev_vars = vars
-        sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
+        # log('g = {}'.format(g))
+        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=200)
         vars = sol.x
-        es, ws = unpack_vars(vars, Ne, Nw)
-        remainders = rgEqs(vars, kc, g, dims)
-        er = np.max(np.abs(remainders))
-        tries = 0
-        while er > 10**-7:
-            tries += 1
-            if tries > 10**3:
-                log('Stopping')
-                return
-            log('{}th try, g = {}'.format(tries, g))
-            log('Failed: {}'.format(sol.message))
-            log('Max error: {}'.format(er))
-            # log('All errors:')
-            # for j in range(len(remainders)//2):
-            #     log(np.round(remainders[j] + 1j*remainders[len(remainders)//2+j],
-            #                  4))
-            log('vars:')
-            log(es)
-            log(ws)
-            log('Retrying with new vars:')
-            vars = prev_vars + 2*imscale_v*(np.random.rand(len(vars))-0.5)
-            es, ws = unpack_vars(vars, Ne, Nw)
-            log(es)
-            log(ws)
-            sol = root(rgEqs, vars, args=(kc, g, dims),
-                       method='lm', jac=rg_jac, options=lmd)
-            vars = sol.x
-            remainders = rgEqs(vars, kc, g, dims)
-            er = np.max(np.abs(remainders))
-            es, ws = unpack_vars(vars, Ne, Nw)
-            if np.min(np.abs(ws)) < 0.7*np.abs(kc[0]) and Nw%2 == 0:
-                log('Omega = 0 solution! Bad!')
-                er = 1
-
-        vars = sol.x
-        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
@@ -384,17 +428,14 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
             log(cws)
     print('')
     print('Incrementing k to be real')
-    vars, er = increment_im_k(vars, dims, g, k, kim, sf=0.99)
+    vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0)
     print('')
-    kc = np.concatenate((k, 0.01*kim))
+    kc = numpy.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
-        sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
-
-
+        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=100)
         vars = sol.x
-        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
@@ -402,40 +443,54 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
         if er > 0.001:
             print('This is too bad')
             return
+        varss[:, i] = vars
     print('')
-    print('Removing the last bit of imaginary stuff')
-    vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, steps=10, sf=1)
+    # print('Removing the last bit of imaginary stuff')
+    # vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, steps=10, sf=1)
 
 
     ces, cws = unpack_vars(vars, Ne, Nw)
-    print('')
-    print('This should be about zero (final error):')
-    print(er)
-    print('')
-    return ces, cws
+
+
+    output_df = pandas.DataFrame({})
+    output_df['g'] = g2s
+    for n in range(Ne):
+        output_df['Re(e_{})'.format(n)] = varss[n, :]
+        output_df['Im(e_{})'.format(n)] = varss[n+Ne, :]
+        output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
+        output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
+    return ces, cws, output_df, varss
 
 
 def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
     L = len(ks)
-    R = np.zeros(L, dtype=np.complex128)
+    R = numpy.zeros(L, dtype=numpy.complex128)
     for i, k in enumerate(ks):
         Zke = Zf(k, es)
-        R[i] = g*np.sum(Zke)
+        R[i] = g*numpy.sum(Zke)
         if extra_bits:
-            otherks = ks[np.arange(L) != i]
+            otherks = ks[numpy.arange(L) != i]
             Zkk = Zf(k, otherks)
-            R[i] += -1*g*np.sum(Zkk) + 1.0
+            R[i] += -1*g*numpy.sum(Zkk) + 1.0
     return R
 
-if __name__ == '__main__':
+def calculate_energies(vars, gs, ks, Ne):
+    energies = numpy.zeros(len(gs))
+    for i, g in enumerate(gs):
+        R = ioms(varss[:Ne, i], g, ks)
+        energies[i] = numpy.sum(ks*R)
+    return energies
 
-    r = rg_jac(np.arange(1,9), np.arange(1,9)/8, -10, (4, 2, 2))
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    r = rg_jac(numpy.arange(1,9), numpy.arange(1,9)/8, -10, (4, 2, 2))
     print('First row of Jacobian: ')
     print(r[0])
     print('First column of Jacobian: ')
     print(r[:, 0])
     print('Diagonal entries of the Jacobian: ')
-    print(np.diagonal(r))
+    print(numpy.diagonal(r))
 
     print('Checking Zs')
     print(rationalZ(3+4j, 2-8j))
@@ -447,56 +502,55 @@ if __name__ == '__main__':
     Nw = int(input('Ndown: '))
     gf = float(input('G: '))
 
+    JOBS = int(input('Number of concurrent jobs to run: '))
+
     # dg = float(input('dg: '))
     # imk = float(input('Scale of imaginary part for k: '))
     # imv = float(input('Same for variable guess: '))
 
-    # dg = 0.001*8/L
-    dg = 0.01
+    dg = 0.001*8/L
+    # dg = 0.005
     g0 = .1*dg
-    # imk = .5*dg/(Ne+Nw)
+    imk = .5*dg/(Ne+Nw)
     imk = g0
     imv = imk
 
 
     dims = (L, Ne, Nw)
 
-    ks = (1.0*np.arange(L) + 1.0)/L
-    es, ws = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
+    ks = (1.0*numpy.arange(L) + 1.0)/L
+    es, ws, output_df, varss = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
     print('')
     print('Solution found:')
     print('e_alpha:')
     for e in es:
-        print('{} + I*{}'.format(float(np.real(e)), np.imag(e)))
+        print('{} + I*{}'.format(float(numpy.real(e)), numpy.imag(e)))
         print('')
     print('omega_beta')
     for e in ws:
-        print('{} + I*{}'.format(float(np.real(e)), np.imag(e)))
+        print('{} + I*{}'.format(float(numpy.real(e)), numpy.imag(e)))
         print('')
-    rk = ioms(es, gf, ks)
-    print('From RG, iom eigenvalues:')
-    for r in rk:
-        print(r)
 
-    print('From RG, energy is:')
-    print(np.sum(ks*rk))
-    rge = np.sum(ks*rk)
+    energies = calculate_energies(varss, output_df['g'], ks, Ne)
 
-    dim_h = binom(2*L, Ne)*binom(2*L, Nw)
-    print('Dim(H) = {}'.format(dim_h))
-    try_diag = int(input('Type 0 to attempt exact diagonalization: '))
-    if try_diag == 0:
+    plt.scatter(output_df['g'], energies)
+    plt.show()
+
+    rge = energies[-1]
+
+    dimH = binom(2*L, Ne)*binom(2*L, Nw)
+    print('Hilbert space dimension: {}'.format(dimH))
+    keep_going = input('Input 1 to diagonalize: ')
+    if keep_going == '1':
         from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
         ho = ham_op(L, gf, ks, basis)
         e, v = find_min_ev(ho, L, basis, n=10)
-        print('Energy found:')
-        print(rge)
         print('Smallest distance from ED result for GS energy:')
-        diffs = np.abs(e-rge)
-        print(np.min(diffs))
-        print('This is the {}th energy'.format(np.argmin(diffs)))
+        diffs = abs(e-rge)
+        print(min(diffs))
+        print('This is the {}th energy'.format(numpy.argmin(diffs)))
         print('True low energies:')
         print(e[:10])
