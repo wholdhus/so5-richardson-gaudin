@@ -1,5 +1,6 @@
 import numpy as np
-from scipy.optimize import root, minimize
+from scipy.optimize import root
+from scipy.special import binom
 
 VERBOSE=True
 TOL=10**-8
@@ -270,12 +271,12 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
                    method='lm', jac=rg_jac, options=lmd)
 
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
-        if np.max(er) > 10**-10:
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        if er > 10**-10:
             log('Highish errors:')
             log('s = {}'.format(s))
-            log(np.max(er))
-        if np.max(er) > 0.001:
+            log(er)
+        if er > 0.001:
             print('This is too bad')
             return
     return vars, er
@@ -324,16 +325,25 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac, options=lmd)
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
+        es, ws = unpack_vars(vars, Ne, Nw)
+        remainders = rgEqs(vars, kc, g, dims)
+        er = np.max(np.abs(remainders))
         tries = 0
-        while np.max(er) > 10**-7:
+        while er > 10**-7:
             tries += 1
             if tries > 10**3:
                 log('Stopping')
                 return
             log('{}th try, g = {}'.format(tries, g))
             log('Failed: {}'.format(sol.message))
-            log('Error: {}'.format(np.max(er)))
+            log('Max error: {}'.format(er))
+            # log('All errors:')
+            # for j in range(len(remainders)//2):
+            #     log(np.round(remainders[j] + 1j*remainders[len(remainders)//2+j],
+            #                  4))
+            log('vars:')
+            log(es)
+            log(ws)
             log('Retrying with new vars:')
             vars = prev_vars + 2*imscale_v*(np.random.rand(len(vars))-0.5)
             es, ws = unpack_vars(vars, Ne, Nw)
@@ -342,32 +352,36 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
             sol = root(rgEqs, vars, args=(kc, g, dims),
                        method='lm', jac=rg_jac, options=lmd)
             vars = sol.x
-            er = np.abs(rgEqs(vars, kc, g, dims))
+            remainders = rgEqs(vars, kc, g, dims)
+            er = np.max(np.abs(remainders))
+            es, ws = unpack_vars(vars, Ne, Nw)
+            if np.min(np.abs(ws)) < 0.7*np.abs(kc[0]) and Nw%2 == 0:
+                log('Omega = 0 solution! Bad!')
+                er = 1
 
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
-        if np.max(er) > 10**-9:
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        if er > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
-            log(np.max(er))
-        if np.max(er) > 0.001 and i > 1:
+            log(er)
+        if er > 0.001 and i > 1:
             print('This is too bad')
             return
         ces, cws = unpack_vars(vars, Ne, Nw)
-        # if i == 0:
-        #     log('Status: {}'.format(sol.status))
-        #     log('Msg: {}'.format(sol.message))
-        #     log('Iterations: {}'.format(sol.nfev))
-        #     # log('Error (according to solver): {}'.format(sol.maxcv))
-        #     log('g = {}'.format(g))
-        #     log('er: {}'.format(np.max(er)))
-        #     log('k:')
-        #     log(k + 1j*kim)
-        #     log('es:')
-        #     log(ces)
-        #     log('omegas:')
-        #     log(cws)
-        #     input('Enter to continue')
+        if i == 0:
+            log('Status: {}'.format(sol.status))
+            log('Msg: {}'.format(sol.message))
+            log('Iterations: {}'.format(sol.nfev))
+            # log('Error (according to solver): {}'.format(sol.maxcv))
+            log('g = {}'.format(g))
+            log('er: {}'.format(er))
+            log('k:')
+            log(k + 1j*kim)
+            log('es:')
+            log(ces)
+            log('omegas:')
+            log(cws)
     print('')
     print('Incrementing k to be real')
     vars, er = increment_im_k(vars, dims, g, k, kim, sf=0.99)
@@ -380,12 +394,12 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
 
 
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
-        if np.max(er) > 10**-9:
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        if er > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
-            log(np.max(er))
-        if np.max(er) > 0.001:
+            log(er)
+        if er > 0.001:
             print('This is too bad')
             return
     print('')
@@ -396,7 +410,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     ces, cws = unpack_vars(vars, Ne, Nw)
     print('')
     print('This should be about zero (final error):')
-    print(np.max(er))
+    print(er)
     print('')
     return ces, cws
 
@@ -468,13 +482,16 @@ if __name__ == '__main__':
     print(np.sum(ks*rk))
     rge = np.sum(ks*rk)
 
-    if L < 6:
+    dim_h = binom(2*L, Ne)*binom(2*L, Nw)
+    print('Dim(H) = {}'.format(dim_h))
+    try_diag = int(input('Type 0 to attempt exact diagonalization: '))
+    if try_diag == 0:
         from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
         ho = ham_op(L, gf, ks, basis)
-        e, v = find_min_ev(ho, L, basis, n=100)
+        e, v = find_min_ev(ho, L, basis, n=10)
         print('Energy found:')
         print(rge)
         print('Smallest distance from ED result for GS energy:')
