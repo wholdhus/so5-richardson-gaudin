@@ -260,48 +260,8 @@ def dvars(vars, pvars, dg, Ne, Nw):
     return deriv
 
 
-def find_root(vars, kc, g, dims, im_v, max_steps=200):
-    prev_vars = vars
-    sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
-    vars = sol.x
-    er = max(abs(rgEqs(vars, kc, g, dims)))
-    es, ws = unpack_vars(vars, Ne, Nw)
-    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
-        log('Omega = 0 solution! Rerunning.')
-        er = 1
-    tries = 0
-    while er > TOL2:
-        tries += 1
-        if tries > max_steps:
-            log('Stopping')
-            return
-        log('{}th try, g = {}'.format(tries, g))
-        log('Failed: {}'.format(sol.message))
-        log('Error: {}'.format(er))
-        remainders = rgEqs(vars, kc, g, dims)
-        remainders = remainders[:Ne+Nw] + 1j*remainders[Ne+Nw:]
-        # for r in remainders:
-        #     log(r)
-        log('Retrying with new vars:')
-        vars = prev_vars + 2*im_v*(numpy.random.rand(len(vars))-0.5)
-        es, ws = unpack_vars(vars, Ne, Nw)
-        log(es)
-        log(ws)
-        sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
-        vars = sol.x
-        er = max(abs(rgEqs(vars, kc, g, dims)))
-
-        es, ws = unpack_vars(vars, Ne, Nw)
-        if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
-            log('Omega = 0 solution! Rerunning.')
-            er = 1
-
-    return sol
-
-
 def root_thread_job(vars, kc, g, dims):
+    L, Ne, Nw = dims
     sol = root(rgEqs, vars, args=(kc, g, dims),
                method='lm', jac=rg_jac, options=lmd)
     vars = sol.x
@@ -314,6 +274,7 @@ def root_thread_job(vars, kc, g, dims):
 
 
 def root_threads(prev_vars, im_v, kc, g, dims):
+        L, Ne, Nw = dims
         with concurrent.futures.ProcessPoolExecutor(max_workers=JOBS) as executor:
             future_results = [executor.submit(root_thread_job,
                                               prev_vars + 2*im_v*(numpy.random.rand(len(prev_vars))-0.5),
@@ -369,7 +330,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     for i, s in enumerate(scale):
 
         kc = numpy.concatenate((k, s*im_k))
-        sol = find_root(vars, kc, g, dims, min(s, 10**-4),
+        sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
                         max_steps=200)
 
 
@@ -415,10 +376,9 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     else:
         print('Woops: abs(gf) < abs(g1)')
         return
-    log('Paths for g:')
-    log(g1s)
-    log(g2s)
-    print('')
+    # log('Paths for g:')
+    # log(g1s)
+    # log(g2s)
     # imscale=0.1*dg
     # kim = imscale_k*numpy.cos(numpy.pi*numpy.arange(L))
     kim = imscale_k*(-1)**numpy.arange(L)
@@ -441,7 +401,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     print('')
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
-        log('g = {}'.format(g))
+        # log('g = {}'.format(g))
         sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=200)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
@@ -474,7 +434,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     kc = numpy.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
-        sol = find_root(vars, kc, g, dims, imscale_v, max_steps=100)
+        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=100)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
