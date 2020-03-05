@@ -3,6 +3,7 @@ from scipy.optimize import root, minimize
 
 VERBOSE=True
 TOL=10**-8
+TOL2=10**-7
 MAXIT=10000
 FACTOR=100
 
@@ -259,6 +260,37 @@ def dvars(vars, pvars, dg, Ne, Nw):
 
     return deriv
 
+def find_root(sol, prev_vars, kc, g, dims, im_v, max_steps=200):
+    vars = sol.x
+    er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+
+    tries = 0
+    while er > TOL2:
+        tries += 1
+        if tries > max_steps:
+            log('Stopping')
+            return
+        log('{}th try, g = {}'.format(tries, g))
+        log('Failed: {}'.format(sol.message))
+        log('Error: {}'.format(er))
+        log('Retrying with new vars:')
+        vars = prev_vars + 2*im_v*(np.random.rand(len(vars))-0.5)
+        es, ws = unpack_vars(vars, Ne, Nw)
+        log(es)
+        log(ws)
+        sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', jac=rg_jac, options=lmd)
+        vars = sol.x
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+
+        es, ws = unpack_vars(vars, Ne, Nw)
+        if np.min(np.abs(ws)) < 0.1:
+            log('Omega = 0 solution! Rerunning.')
+            er = 1
+
+    return sol
+
+
 
 def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     L, Ne, Nw = dims
@@ -270,12 +302,12 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
                    method='lm', jac=rg_jac, options=lmd)
 
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
-        if np.max(er) > 10**-10:
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        if er > 10**-10:
             log('Highish errors:')
             log('s = {}'.format(s))
-            log(np.max(er))
-        if np.max(er) > 0.001:
+            log(er)
+        if er > 0.001:
             print('This is too bad')
             return
     return vars, er
@@ -308,8 +340,8 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     vars = g0_guess(L, Ne, Nw, kc, imscale=imscale_v)
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    es -= g0*np.arange(1, Ne+1)
-    ws -= g0*np.arange(1, Nw+1)
+    # es -= g0*np.arange(1, Ne+1)/Ne
+    # ws -= g0*np.arange(1, Nw+1)/Nw
     if Nw%2==1:
         ws[-1] = 0
     print(es)
@@ -324,33 +356,17 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac, options=lmd)
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
-        tries = 0
-        while np.max(er) > 10**-7:
-            tries += 1
-            if tries > 10**3:
-                log('Stopping')
-                return
-            log('{}th try, g = {}'.format(tries, g))
-            log('Failed: {}'.format(sol.message))
-            log('Error: {}'.format(np.max(er)))
-            log('Retrying with new vars:')
-            vars = prev_vars + 2*imscale_v*(np.random.rand(len(vars))-0.5)
-            es, ws = unpack_vars(vars, Ne, Nw)
-            log(es)
-            log(ws)
-            sol = root(rgEqs, vars, args=(kc, g, dims),
-                       method='lm', jac=rg_jac, options=lmd)
-            vars = sol.x
-            er = np.abs(rgEqs(vars, kc, g, dims))
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        if er > TOL2:
+            sol = find_root(sol, prev_vars, kc, g, dims, imscale_v, max_steps=200)
 
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
-        if np.max(er) > 10**-9:
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        if er > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
-            log(np.max(er))
-        if np.max(er) > 0.001 and i > 1:
+            log(er)
+        if er > 0.001 and i > 1:
             print('This is too bad')
             return
         ces, cws = unpack_vars(vars, Ne, Nw)
@@ -360,7 +376,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
         #     log('Iterations: {}'.format(sol.nfev))
         #     # log('Error (according to solver): {}'.format(sol.maxcv))
         #     log('g = {}'.format(g))
-        #     log('er: {}'.format(np.max(er)))
+        #     log('er: {}'.format(er))
         #     log('k:')
         #     log(k + 1j*kim)
         #     log('es:')
@@ -380,12 +396,12 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
 
 
         vars = sol.x
-        er = np.abs(rgEqs(vars, kc, g, dims))
-        if np.max(er) > 10**-9:
+        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
+        if er > 10**-9:
             log('Highish errors:')
             log('g = {}'.format(g))
-            log(np.max(er))
-        if np.max(er) > 0.001:
+            log(er)
+        if er > 0.001:
             print('This is too bad')
             return
     print('')
@@ -396,7 +412,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     ces, cws = unpack_vars(vars, Ne, Nw)
     print('')
     print('This should be about zero (final error):')
-    print(np.max(er))
+    print(er)
     print('')
     return ces, cws
 
@@ -437,10 +453,10 @@ if __name__ == '__main__':
     # imk = float(input('Scale of imaginary part for k: '))
     # imv = float(input('Same for variable guess: '))
 
-    # dg = 0.001*8/L
-    dg = 0.01
+    dg = 0.001*8/L
+    # dg = 0.005
     g0 = .1*dg
-    # imk = .5*dg/(Ne+Nw)
+    imk = .5*dg/(Ne+Nw)
     imk = g0
     imv = imk
 
