@@ -8,12 +8,14 @@ import multiprocessing
 
 
 VERBOSE=True
+FORCE_GS=True
 TOL=10**-10
 TOL2=10**-7 # there are plenty of spurious minima around 10**-5
-MAXIT=10000
+MAXIT=0 # let's use the default value
 FACTOR=100
+# JOBS = multiprocessing.cpu_count()
+JOBS = 20
 
-JOBS = multiprocessing.cpu_count()
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -257,14 +259,14 @@ def dvars(vars, pvars, dg, Ne, Nw):
     return deriv
 
 
-def find_root(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
+def find_root(vars, kc, g, dims, im_v, max_steps=200):
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac, options=lmd)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     es, ws = unpack_vars(vars, Ne, Nw)
-    if min(abs(ws)) < 0.5*abs(kc[0]) and force_gs:
+    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
         log('Omega = 0 solution! Rerunning.')
         er = 1
     tries = 0
@@ -291,7 +293,7 @@ def find_root(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
         er = max(abs(rgEqs(vars, kc, g, dims)))
 
         es, ws = unpack_vars(vars, Ne, Nw)
-        if min(abs(ws)) < 0.5*abs(kc[0]) and force_gs:
+        if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
             log('Omega = 0 solution! Rerunning.')
             er = 1
 
@@ -303,11 +305,15 @@ def root_thread_job(vars, kc, g, dims):
                method='lm', jac=rg_jac, options=lmd)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
+    es, ws = unpack_vars(vars, Ne, Nw)
+    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
+        # 1log('Omega = 0 solution! Rerunning.')
+        er = 1
     return sol, vars, er
 
 
 def root_threads(prev_vars, im_v, kc, g, dims):
-        with concurrent.futures.ThreadPoolExecutor(max_workers=JOBS) as executor:
+        with concurrent.futures.ProcessPoolExecutor(max_workers=JOBS) as executor:
             future_results = [executor.submit(root_thread_job,
                                               prev_vars + 2*im_v*(numpy.random.rand(len(prev_vars))-0.5),
                                               kc, g, dims)
@@ -319,14 +325,14 @@ def root_threads(prev_vars, im_v, kc, g, dims):
                 except:
                     print_exc()
 
-def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
+def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200):
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac, options=lmd)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     es, ws = unpack_vars(vars, Ne, Nw)
-    if min(abs(ws)) < 0.5*abs(kc[0]) and force_gs:
+    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
         log('Omega = 0 solution! Rerunning.')
         er = 1
     tries = 0
@@ -340,7 +346,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200, force_gs=True)
             log('Stopping')
             return
         log('{}th try, g = {}'.format(tries, g))
-        log('Failed: {}'.format(sol.message))
+        # log('Failed: {}'.format(sol.message))
         log('Smallest error from last set: {}'.format(er))
 
         log('Retrying with {} sets of new vars:'.format(JOBS))
@@ -348,13 +354,10 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200, force_gs=True)
             # print(r)
             sols[i], _, ers[i] = r
         er = min(ers)
-        sol = sols[numpy.argmin(er)]
+        sol = sols[numpy.argmin(ers)]
         vars = sol.x
+        log('Best error: {}'.format(max(abs(rgEqs(vars, kc, g, dims)))))
 
-        es, ws = unpack_vars(vars, Ne, Nw)
-        if min(abs(ws)) < 0.5*abs(kc[0]) and force_gs:
-            log('Omega = 0 solution! Rerunning.')
-            er = 1
         tries += JOBS
     return sol
 
@@ -380,10 +383,23 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     return vars, er
 
 
+def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
+    L = len(ks)
+    R = numpy.zeros(L, dtype=numpy.complex128)
+    for i, k in enumerate(ks):
+        Zke = Zf(k, es)
+        R[i] = g*numpy.sum(Zke)
+        if extra_bits:
+            otherks = ks[numpy.arange(L) != i]
+            Zkk = Zf(k, otherks)
+            R[i] += -1*g*numpy.sum(Zkk) + 1.0
+    return R
+
+
 def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001):
 
     L, Ne, Nw = dims
-    g1sc = 0.01*4/L
+    g1sc = 0.001*4/L
     if gf > g1sc*L:
         g1 = g1sc*L
         g1s = numpy.arange(g0, g1, 0.5*dg)
@@ -405,6 +421,9 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     kc = numpy.concatenate((k, kim))
 
     vars = g0_guess(L, Ne, Nw, kc, imscale=imscale_v)
+
+    varss = numpy.zeros((len(vars), len(g2s)))
+
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
     es -= g0*numpy.arange(1, Ne+1)/Ne
@@ -446,7 +465,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
         #     input('Enter to continue')
     print('')
     print('Incrementing k to be real')
-    vars, er = increment_im_k(vars, dims, g, k, kim, sf=0.99)
+    vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0)
     print('')
     kc = numpy.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
@@ -461,9 +480,10 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
         if er > 0.001:
             print('This is too bad')
             return
+        varss[:, i] = vars
     print('')
-    print('Removing the last bit of imaginary stuff')
-    vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, steps=10, sf=1)
+    # print('Removing the last bit of imaginary stuff')
+    # vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, steps=10, sf=1)
 
 
     ces, cws = unpack_vars(vars, Ne, Nw)
@@ -471,7 +491,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     print('This should be about zero (final error):')
     print(er)
     print('')
-    return ces, cws
+    return ces, cws, varss, g2s
 
 
 def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
@@ -486,8 +506,16 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
             R[i] += -1*g*numpy.sum(Zkk) + 1.0
     return R
 
-if __name__ == '__main__':
+def calculate_energies(varss, gs, ks, Ne):
+    energies = numpy.zeros(len(gs))
+    for i, g in enumerate(gs):
+        R = ioms(varss[:Ne, i], g, ks)
+        energies[i] = numpy.sum(ks*R)
+    return energies
 
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
     r = rg_jac(numpy.arange(1,9), numpy.arange(1,9)/8, -10, (4, 2, 2))
     print('First row of Jacobian: ')
     print(r[0])
@@ -506,6 +534,8 @@ if __name__ == '__main__':
     Nw = int(input('Ndown: '))
     gf = float(input('G: '))
 
+    JOBS = int(input('Number of concurrent jobs to run: '))
+
     # dg = float(input('dg: '))
     # imk = float(input('Scale of imaginary part for k: '))
     # imv = float(input('Same for variable guess: '))
@@ -521,7 +551,7 @@ if __name__ == '__main__':
     dims = (L, Ne, Nw)
 
     ks = (1.0*numpy.arange(L) + 1.0)/L
-    es, ws = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
+    es, ws, varss, gs = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
     print('')
     print('Solution found:')
     print('e_alpha:')
@@ -532,27 +562,24 @@ if __name__ == '__main__':
     for e in ws:
         print('{} + I*{}'.format(float(numpy.real(e)), numpy.imag(e)))
         print('')
-    rk = ioms(es, gf, ks)
-    print('From RG, iom eigenvalues:')
-    for r in rk:
-        print(r)
 
-    print('From RG, energy is:')
-    print(numpy.sum(ks*rk))
-    rge = numpy.sum(ks*rk)
+    energies = calculate_energies(varss, gs, ks, Ne)
+
+    plt.scatter(gs, energies)
+    plt.show()
+
+    rge = energies[-1]
 
     dimH = binom(2*L, Ne)*binom(2*L, Nw)
     print('Hilbert space dimension: {}'.format(dimH))
     keep_going = input('Input 1 to diagonalize: ')
-    if keep_going == '0':
+    if keep_going == '1':
         from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
         ho = ham_op(L, gf, ks, basis)
         e, v = find_min_ev(ho, L, basis, n=100)
-        print('Energy found:')
-        print(rge)
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
         print(min(diffs))
