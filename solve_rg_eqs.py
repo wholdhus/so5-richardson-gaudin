@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import root, minimize
+from scipy.special import binom
 
 VERBOSE=True
 TOL=10**-8
@@ -260,10 +261,12 @@ def dvars(vars, pvars, dg, Ne, Nw):
 
     return deriv
 
-def find_root(sol, prev_vars, kc, g, dims, im_v, max_steps=200):
+def find_root(vars, kc, g, dims, im_v, max_steps=200):
+    prev_vars = vars
+    sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', jac=rg_jac, options=lmd)
     vars = sol.x
     er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
-
     tries = 0
     while er > TOL2:
         tries += 1
@@ -273,6 +276,10 @@ def find_root(sol, prev_vars, kc, g, dims, im_v, max_steps=200):
         log('{}th try, g = {}'.format(tries, g))
         log('Failed: {}'.format(sol.message))
         log('Error: {}'.format(er))
+        remainders = rgEqs(vars, kc, g, dims)
+        remainders = remainders[:Ne+Nw] + 1j*remainders[Ne+Nw:]
+        # for r in remainders:
+        #     log(r)
         log('Retrying with new vars:')
         vars = prev_vars + 2*im_v*(np.random.rand(len(vars))-0.5)
         es, ws = unpack_vars(vars, Ne, Nw)
@@ -298,8 +305,9 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     for i, s in enumerate(scale):
 
         kc = np.concatenate((k, s*im_k))
-        sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
+        sol = find_root(vars, kc, g, dims, min(s, 10**-4),
+                        max_steps=200)
+
 
         vars = sol.x
         er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
@@ -340,8 +348,8 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     vars = g0_guess(L, Ne, Nw, kc, imscale=imscale_v)
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    # es -= g0*np.arange(1, Ne+1)/Ne
-    # ws -= g0*np.arange(1, Nw+1)/Nw
+    es -= g0*np.arange(1, Ne+1)/Ne
+    ws -= g0*np.arange(1, Nw+1)/Nw
     if Nw%2==1:
         ws[-1] = 0
     print(es)
@@ -352,14 +360,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
         log('g = {}'.format(g))
-        prev_vars = vars
-        sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
-        vars = sol.x
-        er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
-        if er > TOL2:
-            sol = find_root(sol, prev_vars, kc, g, dims, imscale_v, max_steps=200)
-
+        sol = find_root(vars, kc, g, dims, imscale_v, max_steps=200)
         vars = sol.x
         er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
@@ -370,19 +371,19 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
             print('This is too bad')
             return
         ces, cws = unpack_vars(vars, Ne, Nw)
-        # if i == 0:
-        #     log('Status: {}'.format(sol.status))
-        #     log('Msg: {}'.format(sol.message))
-        #     log('Iterations: {}'.format(sol.nfev))
-        #     # log('Error (according to solver): {}'.format(sol.maxcv))
-        #     log('g = {}'.format(g))
-        #     log('er: {}'.format(er))
-        #     log('k:')
-        #     log(k + 1j*kim)
-        #     log('es:')
-        #     log(ces)
-        #     log('omegas:')
-        #     log(cws)
+        if i == 0:
+            log('Status: {}'.format(sol.status))
+            log('Msg: {}'.format(sol.message))
+            log('Iterations: {}'.format(sol.nfev))
+            # log('Error (according to solver): {}'.format(sol.maxcv))
+            log('g = {}'.format(g))
+            log('er: {}'.format(er))
+            log('k:')
+            log(k + 1j*kim)
+            log('es:')
+            log(ces)
+            log('omegas:')
+            log(cws)
         #     input('Enter to continue')
     print('')
     print('Incrementing k to be real')
@@ -391,10 +392,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     kc = np.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
-        sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
-
-
+        sol = find_root(vars, kc, g, dims, imscale_v, max_steps=100)
         vars = sol.x
         er = np.max(np.abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
@@ -484,7 +482,10 @@ if __name__ == '__main__':
     print(np.sum(ks*rk))
     rge = np.sum(ks*rk)
 
-    if L < 6:
+    dimH = binom(2*L, Ne)*binom(2*L, Nw)
+    print('Hilbert space dimension: {}'.format(dimH))
+    keep_going = input('Input 1 to diagonalize, 0 to stop.')
+    if keep_going == '0':
         from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
