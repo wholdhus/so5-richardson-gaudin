@@ -1,11 +1,10 @@
 import numpy
 from scipy.optimize import root, minimize
 from scipy.special import binom
+from traceback import print_exc
 
-import pp
-job_server = pp.Server()
-N_CPU = job_server.get_ncpus()
-print('Jobs: {}'.format(N_CPU))
+import concurrent.futures
+import multiprocessing
 
 
 VERBOSE=True
@@ -13,6 +12,8 @@ TOL=10**-10
 TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=10000
 FACTOR=100
+
+JOBS = multiprocessing.cpu_count()
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -297,16 +298,28 @@ def find_root(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
     return sol
 
 
-def root_pp_job(vars, kc, g, dims):
-    sol = root(sol = root(rgEqs, vars, args=(kc, g, dims),
-                              method='lm', jac=rg_jac, options=lmd))
+def root_thread_job(vars, kc, g, dims):
+    sol = root(rgEqs, vars, args=(kc, g, dims),
+               method='lm', jac=rg_jac, options=lmd)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     return sol, vars, er
 
 
-def find_root_pp(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
-    n_jobs = N_CPU - 1
+def root_threads(prev_vars, im_v, kc, g, dims):
+        with concurrent.futures.ThreadPoolExecutor(max_workers=JOBS) as executor:
+            future_results = [executor.submit(root_thread_job,
+                                              prev_vars + 2*im_v*(numpy.random.rand(len(prev_vars))-0.5),
+                                              kc, g, dims)
+                              for n in range(JOBS)]
+            concurrent.futures.wait(future_results)
+            for res in future_results:
+                try:
+                    yield res.result()
+                except:
+                    print_exc()
+
+def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', jac=rg_jac, options=lmd)
@@ -318,12 +331,11 @@ def find_root_pp(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
         er = 1
     tries = 0
 
-    sols = [-999 for i in range(n_jobs)]
-    ers = [-887 for i in range(n_jobs)]
+    sols = [-999 for i in range(JOBS)]
+    ers = [-887 for i in range(JOBS)]
 
 
     while er > TOL2:
-        tries += n_jobs
         if tries > max_steps:
             log('Stopping')
             return
@@ -331,25 +343,19 @@ def find_root_pp(vars, kc, g, dims, im_v, max_steps=200, force_gs=True):
         log('Failed: {}'.format(sol.message))
         log('Smallest error from last set: {}'.format(er))
 
-        log('Retrying with {} sets of new vars:'.format(n_jobs))
-        vars = [prev_vars + 2*im_v*(numpy.random.rand(len(vars))-0.5) for n in range(n_jobs)]
-        jobs = [job_server.submit(root_pp_job, (vars[n], kc, g, dims),
-                                         (rgEqs, rg_jac, reZ, imZ, dZ_rr, dZ_ri),
-                                         ()) for n in range(n_jobs)]
-        for i, j in enumerate(jobs):
-            print(j)
-            print('')
-            print(j())
-            print('')
-            sols[i], _, ers[i] = j()
+        log('Retrying with {} sets of new vars:'.format(JOBS))
+        for i, r in enumerate(root_threads(prev_vars, im_v, kc, g, dims)):
+            # print(r)
+            sols[i], _, ers[i] = r
         er = min(ers)
-        sol = sols[np.argmin(er)]
+        sol = sols[numpy.argmin(er)]
         vars = sol.x
 
         es, ws = unpack_vars(vars, Ne, Nw)
         if min(abs(ws)) < 0.5*abs(kc[0]) and force_gs:
             log('Omega = 0 solution! Rerunning.')
             er = 1
+        tries += JOBS
     return sol
 
 def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
@@ -413,7 +419,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01, imscale_v=0.001)
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
         log('g = {}'.format(g))
-        sol = find_root_pp(vars, kc, g, dims, imscale_v, max_steps=200)
+        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=200)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
@@ -537,7 +543,7 @@ if __name__ == '__main__':
 
     dimH = binom(2*L, Ne)*binom(2*L, Nw)
     print('Hilbert space dimension: {}'.format(dimH))
-    keep_going = input('Input 1 to diagonalize, 0 to stop.')
+    keep_going = input('Input 1 to diagonalize: ')
     if keep_going == '0':
         from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
         from quspin.operators import quantum_operator
