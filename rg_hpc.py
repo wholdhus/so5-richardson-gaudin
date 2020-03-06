@@ -13,7 +13,7 @@ if len(sys.argv) < 4:
 
 L = int(sys.argv[1])
 N = int(sys.argv[2])
-gf = float(sys.argv[3])
+Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
@@ -39,15 +39,18 @@ print('Final coupling (numerical)')
 print(gf)
 print('Spectrum')
 print(ks)
+print('Imaginary part of guesses')
+print(imv)
 print('')
 
 dims = (L, Ne, Nw)
 
-es, ws, vars_df, varss = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
+es, ws, vars_df = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
                                     imscale_v=imv)
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'solutions_full_{}_{}_{}.csv'.format(L, N, gf))
 
-energies = calculate_energies(varss, vars_df['g'], ks, Ne)
-plt.scatter(vars_df['g'], energies)
+energies = vars_df['energy']
+
+plt.scatter(vars_df['G'], energies)
 plt.savefig(RESULT_FP + 'energies_full_{}_{}_{}.png'.format(L, N, gf))
