@@ -291,8 +291,8 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs):
         L, Ne, Nw = dims
         with concurrent.futures.ProcessPoolExecutor(max_workers=CPUS) as executor:
             # imaginary part of e is extremely close to imaginary part of kc, so lets use tiny noise
-            noises_e = np.concatenate(noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5),
-                                      noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5)/1000)
+            noises_e = np.concatenate((noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5),
+                                       noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5)*10**-3), axis=1)
             # Real and im parts of w are both around the same distance from kc
             noises_w = noise_scale*.5*(np.random.rand(JOBS, 2*Nw) - 0.5)
             noises = np.concatenate((noises_e, noises_w), axis=1)
@@ -350,7 +350,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
             # log(vars)
         noise_scale *= factor
         for i, r in enumerate(root_threads(prev_vars, noise_scale,
-                              kc, g, dims)):
+                              kc, g, dims, force_gs)):
             # print(r)
             sols[i], _, ers[i] = r
         er = np.min(ers)
