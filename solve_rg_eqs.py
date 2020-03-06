@@ -267,7 +267,7 @@ def dvars(vars, pvars, dg, Ne, Nw):
     return deriv
 
 
-def root_thread_job(vars, kc, g, dims):
+def root_thread_job(vars, kc, g, dims, force_gs):
     L, Ne, Nw = dims
     # log('Trying with vars = ')
     # log(vars)
@@ -276,13 +276,18 @@ def root_thread_job(vars, kc, g, dims):
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     es, ws = unpack_vars(vars, Ne, Nw)
-    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
-        # log('Omega = 0 solution! Rerunning.')
-        er = 1
+    if force_gs:
+        # Running checks to see if this is deviating from ground state solution
+        min_w = np.min(np.abs(ws))
+        k_cplx = kc[:L] + 1j*kc[L:]
+        k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2]))
+        if min_w < 0.5*kc[0] or k_distance > 10**-3:
+            er = 1
+
     return sol, vars, er
 
 
-def root_threads(prev_vars, noise_scale, kc, g, dims):
+def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs):
         L, Ne, Nw = dims
         with concurrent.futures.ProcessPoolExecutor(max_workers=CPUS) as executor:
             # imaginary part of e is extremely close to imaginary part of kc, so lets use tiny noise
@@ -295,7 +300,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims):
             tries = [prev_vars + noises[n] for n in range(JOBS)]
             future_results = [executor.submit(root_thread_job,
                                               tries[n],
-                                              kc, g, dims)
+                                              kc, g, dims, force_gs)
                               for n in range(JOBS)]
             concurrent.futures.wait(future_results)
             for res in future_results:
@@ -305,7 +310,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims):
                     print_exc()
 
 def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
-                          use_k_guess=False, factor=1.1):
+                          use_k_guess=False, factor=1.1, force_gs=True):
     L, Ne, Nw = dims
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
@@ -495,7 +500,9 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     while i < len(g2s) and keep_going:
         g = g2s[i]
         try:
-            sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=MAX_STEPS)
+            # The assumptions made in "forcing" ground state probably don't hold for high coupling
+            sol = find_root_multithread(vars, kc, g, dims, imscale_v,
+                                        max_steps=MAX_STEPS, force_gs=False)
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
             if er > 10**-9:
