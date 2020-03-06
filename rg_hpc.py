@@ -1,7 +1,7 @@
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
-from solve_rg_eqs import numpy, solve_rgEqs, calculate_energies
+from solve_rg_eqs import np, solve_rgEqs, calculate_energies
 
 RESULT_FP = '/geode2/home/u100/wholdhus/Karst/SO5/results/'
 
@@ -23,7 +23,7 @@ g0 = dg/N
 imk = g0
 imv = g0
 
-ks = (1.0*numpy.arange(L) + 1.0)/L
+ks = (1.0*np.arange(L) + 1.0)/L
 
 print('Parameters:')
 print(L)

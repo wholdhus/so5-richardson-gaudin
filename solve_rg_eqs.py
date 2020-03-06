@@ -15,7 +15,7 @@ TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
-JOBS = 16
+JOBS = 2*CPUS
 MAX_STEPS = 1000
 
 lmd = {'maxiter': MAXIT,
@@ -270,7 +270,7 @@ def root_thread_job(vars, kc, g, dims):
     er = max(abs(rgEqs(vars, kc, g, dims)))
     es, ws = unpack_vars(vars, Ne, Nw)
     if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
-        log('Omega = 0 solution! Rerunning.')
+        # log('Omega = 0 solution! Rerunning.')
         er = 1
     return sol, vars, er
 
@@ -281,7 +281,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims):
             noises_e = noise_scale*2*(np.random.rand(JOBS, 2*Ne) - 0.5)
             noises_w = noise_scale*.5*(np.random.rand(JOBS, 2*Nw) - 0.5)
             noises = np.concatenate((noises_e, noises_w), axis=1)
-            log('Noise ranges from {} to {}'.format(np.min(noises), np.max(noises)))
+            # log('Noise ranges from {} to {}'.format(np.min(noises), np.max(noises)))
             tries = [prev_vars + noises[n] for n in range(JOBS)]
             future_results = [executor.submit(root_thread_job,
                                               tries[n],
@@ -458,18 +458,31 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     print('')
     kc = np.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
-    for i, g in enumerate(g2s):
-        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=MAX_STEPS)
-        vars = sol.x
-        er = max(abs(rgEqs(vars, kc, g, dims)))
-        if er > 10**-9:
-            log('Highish errors:')
-            log('g = {}'.format(g))
-            log(er)
-        if er > 0.001:
-            print('This is too bad')
-            return
-        varss[:, i] = vars
+    i = 0
+    keep_going = True
+    while i < len(g2s) and keep_going:
+        g = g2s[i]
+        try:
+            sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=MAX_STEPS)
+            vars = sol.x
+            er = max(abs(rgEqs(vars, kc, g, dims)))
+            if er > 10**-9:
+                log('Highish errors:')
+                log('g = {}'.format(g))
+                log(er)
+            varss[:, i] = vars
+            i += 1
+        except Exception as e:
+            print('Error during g incrementing')
+            print(e)
+            keep_going = False
+
+    if not keep_going:
+        print('Terminated at g = {}'.format(g))
+        g2s = g2s[:i-1]
+        gf = g2s[-1]
+        varss = varss[:, :i-1]
+
     print('')
     # print('Removing the last bit of imaginary stuff')
     # vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, steps=10, sf=1)
@@ -550,7 +563,7 @@ if __name__ == '__main__':
     print('Solution found:')
     print('e_alpha:')
     for e in es:
-        print('{} + I*{}'.format(float(np.real(e)), np.imag(e)))
+        print('{} + I*{}'.formatls(float(np.real(e)), np.imag(e)))
         print('')
     print('omega_beta')
     for e in ws:
