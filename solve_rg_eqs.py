@@ -8,15 +8,15 @@ import concurrent.futures
 import multiprocessing
 
 
-VERBOSE=True
+VERBOSE=False
 FORCE_GS=True
 TOL=10**-10
 TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 # JOBS = multiprocessing.cpu_count()
-JOBS = 20
-
+JOBS = 16
+MAX_STEPS = 1000
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -287,7 +287,7 @@ def root_threads(prev_vars, im_v, kc, g, dims):
                 except:
                     print_exc()
 
-def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200):
+def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS):
     L, Ne, Nw = dims
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
@@ -303,6 +303,9 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=200):
     sols = [-999 for i in range(JOBS)]
     ers = [-887 for i in range(JOBS)]
 
+    if er > TOL2:
+	print('g = {}'.format(g))
+        print('Bad initial guess. Trying with noise.')
 
     while er > TOL2:
         if tries > max_steps:
@@ -331,9 +334,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
 
         kc = numpy.concatenate((k, s*im_k))
         sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
-                        max_steps=200)
-
-
+                        max_steps=MAX_STEPS)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-10:
@@ -402,7 +403,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
         # log('g = {}'.format(g))
-        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=200)
+        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=MAX_STEPS)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
@@ -433,7 +434,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     kc = numpy.concatenate((k, 0.01*kim))
     print('Now doing the rest of g steps')
     for i, g in enumerate(g2s):
-        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=100)
+        sol = find_root_multithread(vars, kc, g, dims, imscale_v, max_steps=MAX_STEPS)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 10**-9:
@@ -474,10 +475,10 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
             R[i] += -1*g*numpy.sum(Zkk) + 1.0
     return R
 
-def calculate_energies(vars, gs, ks, Ne):
+def calculate_energies(varss, gs, ks, Ne):
     energies = numpy.zeros(len(gs))
     for i, g in enumerate(gs):
-        R = ioms(varss[:Ne, i], g, ks)
+        R = numpy.real(ioms(varss[:Ne, i], g, ks))
         energies[i] = numpy.sum(ks*R)
     return energies
 
@@ -508,7 +509,7 @@ if __name__ == '__main__':
     # imk = float(input('Scale of imaginary part for k: '))
     # imv = float(input('Same for variable guess: '))
 
-    dg = 0.001*8/L
+    dg = 0.005*8/L
     # dg = 0.005
     g0 = .1*dg
     imk = .5*dg/(Ne+Nw)
