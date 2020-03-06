@@ -329,7 +329,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
     if er > TOL2:
         print('g = {}'.format(g))
         print('Bad initial guess. Trying with noise.')
-
+    noise_scale = im_v
     while er > TOL2:
         if tries > max_steps:
             log('Stopping')
@@ -348,7 +348,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
                                                   kc[L+np.arange(Nw)//2])))
                                   )
             # log(vars)
-        noise_scale = im_v * factor * tries
+        noise_scale *= factor
         for i, r in enumerate(root_threads(prev_vars, noise_scale,
                               kc, g, dims)):
             # print(r)
