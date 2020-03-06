@@ -246,9 +246,9 @@ def g0_guess(L, Ne, Nw, kc, imscale=0.01):
     double_w = np.arange(Nw)//2
     er = k_r[double_e]
     wr = k_r[double_w]
-    ei = 1.8*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
-    wi = -.32*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
-    # ei += k_i[double_e]
+    ei = .007*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
+    wi = -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+    ei += k_i[double_e] # The actual solutions for e_i are extremely close to k_i
     # wi += k_i[double_w]
     if Nw%2 == 1: # Nw is odd
         wi[-1] = 0
@@ -285,7 +285,10 @@ def root_thread_job(vars, kc, g, dims):
 def root_threads(prev_vars, noise_scale, kc, g, dims):
         L, Ne, Nw = dims
         with concurrent.futures.ProcessPoolExecutor(max_workers=CPUS) as executor:
-            noises_e = noise_scale*2*(np.random.rand(JOBS, 2*Ne) - 0.5)
+            # imaginary part of e is extremely close to imaginary part of kc, so lets use tiny noise
+            noises_e = np.concatenate(noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5),
+                                      noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5)/1000)
+            # Real and im parts of w are both around the same distance from kc
             noises_w = noise_scale*.5*(np.random.rand(JOBS, 2*Nw) - 0.5)
             noises = np.concatenate((noises_e, noises_w), axis=1)
             # log('Noise ranges from {} to {}'.format(np.min(noises), np.max(noises)))
