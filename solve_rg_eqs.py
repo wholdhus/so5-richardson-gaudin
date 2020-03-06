@@ -15,7 +15,7 @@ TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
-JOBS = 16
+JOBS = 2*CPUS
 MAX_STEPS = 1000
 
 lmd = {'maxiter': MAXIT,
@@ -314,7 +314,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
     if er > TOL2:
         print('g = {}'.format(g))
         print('Bad initial guess. Trying with noise.')
-
+    noise_scale = im_v
     while er > TOL2:
         if tries > max_steps:
             log('Stopping')
@@ -333,7 +333,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
                                                   kc[L+np.arange(Nw)//2])))
                                   )
             # log(vars)
-        noise_scale = im_v * factor * tries
+        noise_scale *= factor
         for i, r in enumerate(root_threads(prev_vars, noise_scale,
                               kc, g, dims)):
             # print(r)
