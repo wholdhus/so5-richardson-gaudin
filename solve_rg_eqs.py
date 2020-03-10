@@ -13,10 +13,10 @@ FORCE_GS=True
 TOL=10**-10
 TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
-FACTOR=100
+FACTOR=1000
 CPUS = multiprocessing.cpu_count()
 JOBS = 2*CPUS
-MAX_STEPS = 1000
+MAX_STEPS = 100
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -239,17 +239,20 @@ def rg_jac(vars, k, g, dims):
     return g*jac
 
 
-def g0_guess(L, Ne, Nw, kc, imscale=0.01):
+def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
     k_r = kc[:L]
     k_i = kc[L:]
     double_e = np.arange(Ne)//2
     double_w = np.arange(Nw)//2
-    er = k_r[double_e]
-    wr = k_r[double_w]
-    ei = .007*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
-    wi = -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
-    ei += k_i[double_e] # The actual solutions for e_i are extremely close to k_i
-    # wi += k_i[double_w]
+    # Initial guesses from perturbation theory
+    er = k_r[double_e]*(1-g0*k_r[double_e])
+    wr = k_r[double_w]*(1-g0*k_r[double_w]/3)
+    ei = k_i[double_e]*(1-g0*k_r[double_e])
+    wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
+    # Also adding some noise (could find at next order in pert. theory?)
+    ei += .07*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
+    wi += -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
+
     if Nw%2 == 1: # Nw is odd
         wi[-1] = 0
         wr[-1] = 0
@@ -296,7 +299,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs):
             # Real and im parts of w are both around the same distance from kc
             noises_w = noise_scale*.5*(np.random.rand(JOBS, 2*Nw) - 0.5)
             noises = np.concatenate((noises_e, noises_w), axis=1)
-            # log('Noise ranges from {} to {}'.format(np.min(noises), np.max(noises)))
+            log('Noise ranges from {} to {}'.format(np.min(noises), np.max(noises)))
             tries = [prev_vars + noises[n] for n in range(JOBS)]
             future_results = [executor.submit(root_thread_job,
                                               tries[n],
@@ -310,7 +313,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs):
                     print_exc()
 
 def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
-                          use_k_guess=False, factor=1.1, force_gs=True):
+                          use_k_guess=False, factor=1.5, force_gs=True):
     L, Ne, Nw = dims
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
@@ -441,14 +444,14 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
 
-    vars = g0_guess(L, Ne, Nw, kc, imscale=imscale_v)
+    vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
 
     varss = np.zeros((len(vars), len(g2s)))
 
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    es -= g0*np.arange(1, Ne+1)/Ne
-    ws -= g0*np.arange(1, Nw+1)/Nw
+    # es -= g0*np.arange(1, Ne+1)/Ne
+    # ws -= g0*np.arange(1, Nw+1)/Nw
     if Nw%2==1:
         ws[-1] = 0
     print(es)
@@ -481,6 +484,10 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
             log('er: {}'.format(er))
             log('Solution vector:')
             log(vars)
+            log('G0 guess:')
+            log(g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v))
+            log('Solution minus g0 guess:')
+            log(vars - g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v))
             log('k:')
             k_full = k + 1j*kim
             log(k_full)
