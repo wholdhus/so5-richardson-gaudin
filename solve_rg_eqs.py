@@ -10,13 +10,13 @@ import multiprocessing
 
 VERBOSE=True
 FORCE_GS=True
-TOL=10**-10
-TOL2=10**-7 # there are plenty of spurious minima around 10**-5
+TOL=10**-12
+TOL2=10**-8 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=1000
 CPUS = multiprocessing.cpu_count()
 JOBS = 2*CPUS
-MAX_STEPS = 100
+MAX_STEPS = 400
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -67,6 +67,9 @@ def trigZ(x, y):
 
 def unpack_vars(vars, Ne, Nw):
     # Variable vector: [re(e)..., im(e)..., re(w)..., im(w)...]
+    if len(vars) != 2*(Ne+Nw):
+        print('Cannot unpack variables! Wrong length!')
+        return
     ces = vars[:Ne] + 1j*vars[Ne:2*Ne]
     cws = vars[2*Ne:2*Ne+Nw] + 1j*vars[2*Ne+Nw:]
 
@@ -290,7 +293,8 @@ def root_thread_job(vars, kc, g, dims, force_gs):
     return sol, vars, er
 
 
-def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs):
+def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs,
+                 noise_factors=None):
         L, Ne, Nw = dims
         with concurrent.futures.ProcessPoolExecutor(max_workers=CPUS) as executor:
             # imaginary part of e is extremely close to imaginary part of kc, so lets use tiny noise
@@ -299,6 +303,8 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs):
             # Real and im parts of w are both around the same distance from kc
             noises_w = noise_scale*.5*(np.random.rand(JOBS, 2*Nw) - 0.5)
             noises = np.concatenate((noises_e, noises_w), axis=1)
+            if noise_factors is not None:
+                noises = noises * noise_factors
             log('Noise ranges from {} to {}'.format(np.min(noises), np.max(noises)))
             tries = [prev_vars + noises[n] for n in range(JOBS)]
             future_results = [executor.submit(root_thread_job,
@@ -313,7 +319,9 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs):
                     print_exc()
 
 def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
-                          use_k_guess=False, factor=1.5, force_gs=True):
+                          use_k_guess=False, factor=1.5, force_gs=True,
+                          noise_factors=None):
+    vars0 = vars
     L, Ne, Nw = dims
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
@@ -329,31 +337,30 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
     sols = [-999 for i in range(JOBS)]
     ers = [-887 for i in range(JOBS)]
 
-    if er > TOL2:
-        print('g = {}'.format(g))
-        print('Bad initial guess. Trying with noise.')
     noise_scale = im_v
+
+    if er > TOL2:
+        log('Bad initial guess. Trying with noise.')
+        log('g = {}, er = {}'.format(g, er))
     while er > TOL2:
         if tries > max_steps:
             log('Stopping')
             return
-        log('{}th try, g = {}'.format(tries, g))
-        # log('Failed: {}'.format(sol.message))
+        log('{}th try at g = {}'.format(tries, g))
         log('Smallest error from last set: {}'.format(er))
-
-        log('Retrying with {} sets of new vars:'.format(JOBS))
+        # log('Retrying with {} sets of new vars:'.format(JOBS))
         if use_k_guess:
-            log('Using k + noise')
-            vars = np.concatenate(
+            # log('Using k + noise')
+            vars0 = np.concatenate(
                                  (np.concatenate((kc[np.arange(Ne)//2],
                                                   kc[L+np.arange(Ne)//2])),
                                   np.concatenate((kc[np.arange(Nw)//2],
                                                   kc[L+np.arange(Nw)//2])))
                                   )
-            # log(vars)
         noise_scale *= factor
-        for i, r in enumerate(root_threads(prev_vars, noise_scale,
-                              kc, g, dims, force_gs)):
+        for i, r in enumerate(root_threads(vars0, noise_scale,
+                              kc, g, dims, force_gs,
+                              noise_factors=noise_factors)):
             # print(r)
             sols[i], _, ers[i] = r
         er = np.min(ers)
@@ -362,6 +369,10 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
         # log('Best error: {}'.format(er))
 
         tries += JOBS
+    # if not use_k_guess:
+    #     # It's more important that I see how my initial guess performed here.
+    #     log('Solution - initial guess')
+    #     log(vars - vars0)
     return sol
 
 def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
@@ -374,10 +385,10 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
                         max_steps=MAX_STEPS)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
-        if er > 10**-10:
-            log('Highish errors:')
-            log('s = {}'.format(s))
-            log(er)
+        # if er > 10**-10:
+        #     log('Highish errors:')
+        #     log('s = {}'.format(s))
+        #     log(er)
         if er > 0.001:
             print('This is too bad')
             return
@@ -397,18 +408,6 @@ def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
     return R
 
 
-def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
-    L = len(ks)
-    R = np.zeros(L, dtype=np.complex128)
-    for i, k in enumerate(ks):
-        Zke = Zf(k, es)
-        R[i] = g*np.sum(Zke)
-        if extra_bits:
-            otherks = ks[np.arange(L) != i]
-            Zkk = Zf(k, otherks)
-            R[i] += -1*g*np.sum(Zkk) + 1.0
-    return R
-
 def calculate_energies(varss, gs, ks, Ne):
     energies = np.zeros(len(gs))
     for i, g in enumerate(gs):
@@ -417,10 +416,53 @@ def calculate_energies(varss, gs, ks, Ne):
     return energies
 
 
-def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
+def bootstrap_g0(dims, g0, kc,
+                 imscale_v=0.001):
+    L, Ne, Nw = dims
+    if Ne%2 != 0 or Nw%2 != 0:
+        print('Error! I need even spin up and down :<')
+        return
+    Ns = np.arange(2, Ne+1, 2)
+    vars = g0_guess(L, 2, 2, kc, g0, imscale=imscale_v)
+    er = 10**-6
+    for N in Ns:
+        log('Now using {} fermions'.format(2*N))
+        dims = (L, N, N)
+        # Solving for 2N fermions using extrapolation from previous solution
+        if N == 2:
+            sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
+                                        max_steps=MAX_STEPS,
+                                        use_k_guess=True)
+        else:
+            # The previous solution matches to roughly the accuracy of the solution
+            # for the shared variables
+            noise_factors = 10*er*np.ones(len(vars))
+            # But we will still need to try random stuff for the 4 new variables
+            noise_factors[N-2:N] = 1
+            noise_factors[2*N-2:2*N] = 1
+            noise_factors[3*N-2:3*N] = 1
+            noise_factors[4*N-2:4*N] = 1
+            sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
+                                        max_steps=MAX_STEPS,
+                                        use_k_guess=False,
+                                        noise_factors=noise_factors)
+        vars = sol.x
+        er = max(abs(rgEqs(vars, kc, g0, dims)))
+        log('Error with {} fermions: {}'.format(2*N, er))
+        # Now using this to form next guess
+        if N < Ne:
+            vars_guess = g0_guess(L, N+2, N+2, kc, g0, imscale=imscale_v)
+            es, ws = unpack_vars(vars, N, N)
+            esg, wsg = unpack_vars(vars_guess, N+2, N+2)
+            es = np.append(es, esg[-2:])
+            ws = np.append(ws, wsg[-2:])
+            vars = pack_vars(es, ws)
+
+    return sol
+
+
+def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 imscale_v=0.001):
-
-
     L, Ne, Nw = dims
     log('k:')
     log(k)
@@ -436,22 +478,12 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     else:
         print('Woops: abs(gf) < abs(g1)')
         return
-    # log('Paths for g:')
-    # log(g1s)
-    # log(g2s)
-    # imscale=0.1*dg
-    # kim = imscale_k*np.cos(np.pi*np.arange(L))
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
-
     vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
-
     varss = np.zeros((len(vars), len(g2s)))
-
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    # es -= g0*np.arange(1, Ne+1)/Ne
-    # ws -= g0*np.arange(1, Nw+1)/Nw
     if Nw%2==1:
         ws[-1] = 0
     print(es)
@@ -462,15 +494,15 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
     for i, g in enumerate(g1s):
         # log('g = {}'.format(g))
-        sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                    max_steps=MAX_STEPS,
-                                    use_k_guess=True)
+        if i == 0:
+            print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
+            sol = bootstrap_g0(dims, g0, kc, imscale_v)
+        else:
+            sol = find_root_multithread(vars, kc, g, dims, imscale_v,
+                                        max_steps=MAX_STEPS,
+                                        use_k_guess=True)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
-        if er > TOL:
-            log('Highish errors:')
-            log('g = {}'.format(g))
-            log(er)
         if er > 0.001 and i > 1:
             print('This is too bad')
             return
@@ -479,18 +511,11 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
             log('Status: {}'.format(sol.status))
             log('Msg: {}'.format(sol.message))
             log('Iterations: {}'.format(sol.nfev))
-            # log('Error (according to solver): {}'.format(sol.maxcv))
             log('g = {}'.format(g))
             log('er: {}'.format(er))
             log('Solution vector:')
             log(vars)
-            log('G0 guess:')
-            log(g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v))
-            log('Solution minus g0 guess:')
-            log(vars - g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v))
-            log('k:')
             k_full = k + 1j*kim
-            log(k_full)
             log('es - k:')
             log(ces - k_full[np.arange(Ne)//2])
             log('omegas - k:')
@@ -500,16 +525,17 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
     print('Incrementing k to be real')
     vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0)
     print('')
-    kc = np.concatenate((k, 0.01*kim))
+    kc = np.concatenate((k, np.zeros(L)))
     print('Now doing the rest of g steps')
     i = 0
     keep_going = True
     while i < len(g2s) and keep_going:
         g = g2s[i]
         try:
-            # The assumptions made in "forcing" ground state probably don't hold for high coupling
+            # The assumptions made in "forcing" ground state
+            # probably don't hold for high coupling
             sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=MAX_STEPS, force_gs=False)
+                                        max_steps=Ne, force_gs=False)
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
             if er > 10**-9:
@@ -518,6 +544,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
                 log(er)
             varss[:, i] = vars
             i += 1
+            log('Finished with g = {}'.format(g))
         except Exception as e:
             print('Error during g incrementing')
             print(e)
@@ -528,15 +555,11 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
         g2s = g2s[:i-1]
         gf = g2s[-1]
         varss = varss[:, :i-1]
-
     print('')
-    # print('Removing the last bit of imaginary stuff')
-    # vars, er = increment_im_k(vars, dims, g, k, 0.01*kim, steps=10, sf=1)
     print('Final error:')
     print(er)
 
     ces, cws = unpack_vars(vars, Ne, Nw)
-
     output_df = pandas.DataFrame({})
     output_df['g'] = g2s
     output_df['G'] = g_to_G(g2s, k)
@@ -546,6 +569,14 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.01,
         output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
         output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
     output_df['energy'] = calculate_energies(varss, g2s, k, Ne)
+    # log('Sum e_alpha')
+    # log(np.sum(ces))
+    # log('Sum k*Rk')
+    # rk = ioms(ces, g, k)
+    # log(np.sum(k*rk))
+    # log('Final energy')
+    # energies = np.array(output_df['energy'])*(1 - gf*np.sum(k))
+    # log(energies[-1])
     return ces, cws, output_df
 
 
