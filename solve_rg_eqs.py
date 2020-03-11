@@ -11,12 +11,12 @@ import multiprocessing
 VERBOSE=True
 FORCE_GS=True
 TOL=10**-12
-TOL2=10**-8 # there are plenty of spurious minima around 10**-5
+TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
-FACTOR=1000
+FACTOR=100
 CPUS = multiprocessing.cpu_count()
 JOBS = 2*CPUS
-MAX_STEPS = 400
+MAX_STEPS = 100*JOBS
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -382,7 +382,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     L, Ne, Nw = dims
     scale = 1 - np.linspace(0, sf, steps)
     for i, s in enumerate(scale):
-
+        log(s)
         kc = np.concatenate((k, s*im_k))
         sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
                         max_steps=MAX_STEPS)
@@ -544,7 +544,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     print('')
     print('Incrementing k to be real')
-    vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0)
+    vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0, steps=10*L)
     print('')
     kc = np.concatenate((k, np.zeros(L)))
     print('Now doing the rest of g steps')
