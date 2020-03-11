@@ -297,11 +297,15 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs,
                  noise_factors=None):
         L, Ne, Nw = dims
         with concurrent.futures.ProcessPoolExecutor(max_workers=CPUS) as executor:
-            # imaginary part of e is extremely close to imaginary part of kc, so lets use tiny noise
-            noises_e = np.concatenate((noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5),
-                                       noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5)*10**-3), axis=1)
+            if np.abs(g*L) < 0.05:
+                # imaginary part of e is extremely close to imaginary part of kc
+                # at low g, so lets use tiny noise
+                noises_e = np.concatenate((noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5),
+                                           noise_scale*2*(np.random.rand(JOBS, Ne) - 0.5)*10**-3), axis=1)
+            else:
+                noises_e = noise_scale * 2 * (np.random.rand(JOBS, 2*Ne) - 0.5)
             # Real and im parts of w are both around the same distance from kc
-            noises_w = noise_scale*.5*(np.random.rand(JOBS, 2*Nw) - 0.5)
+            noises_w = noise_scale * 0.5 * (np.random.rand(JOBS, 2*Nw) - 0.5)
             noises = np.concatenate((noises_e, noises_w), axis=1)
             if noise_factors is not None:
                 noises = noises * noise_factors
@@ -366,7 +370,6 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
         er = np.min(ers)
         sol = sols[np.argmin(ers)]
         vars = sol.x
-        # log('Best error: {}'.format(er))
 
         tries += JOBS
     # if not use_k_guess:
@@ -385,10 +388,6 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
                         max_steps=MAX_STEPS)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
-        # if er > 10**-10:
-        #     log('Highish errors:')
-        #     log('s = {}'.format(s))
-        #     log(er)
         if er > 0.001:
             print('This is too bad')
             return
@@ -464,20 +463,42 @@ def bootstrap_g0(dims, g0, kc,
 def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 imscale_v=0.001):
     L, Ne, Nw = dims
-    log('k:')
-    log(k)
-    g1sc = 0.0005*4/L
-    if gf > g1sc*L:
-        g1 = g1sc*L
-        g1s = np.arange(g0, g1, 0.5*dg)
-        g2s = np.append(np.arange(g1, gf, dg), gf)
-    elif gf < -1*g1sc*L:
-        g1 = -1*g1s*L
-        g1s = -1*np.linspace(g0, -1*g1, dg)
-        g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
+    N = Ne + Nw
+    # log('k:')
+    # log(k)
+    # log('')
+    gc = -.1/(L-N+1)
+    log('Problematic g: {}'.format(gc))
+    log('Final g: {}'.format(gf))
+    Gc = g_to_G(gc, k)
+    Gf = g_to_G(gf, k)
+    if np.sign(gf) == np.sign(gc) and np.abs(gf) > np.abs(gc):
+        log('Final coupling G = {} is past problematic point Gc = {}'.format(
+            Gf, Gc))
+        g1 = gc + 6*dg * np.sign(gf)
+        if gf > g1:
+            g1s = np.concatenate((np.arange(g0, gc - 4*dg, 0.25*dg),
+                                  np.arange(gc + 4*dg, g1, 0.25*dg),
+                                  [g1]))
+            g2s = np.append(np.arange(g1, gf, dg), gf)
+        else:
+            print('Woops, I need g > 0 for now')
     else:
-        print('Woops: abs(gf) < abs(g1)')
-        return
+        g1 = 2*dg * np.sign(gf)
+        if gf > g1:
+            g1s = np.arange(g0, g1, 0.5*dg)
+            g2s = np.append(np.arange(g1, gf, dg), gf)
+        elif gf < g1:
+            g1s = -1*np.linspace(g0, -1*g1, 0.5*dg)
+            g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
+        else:
+            print('Woops: abs(gf) < abs(g1)')
+            return
+    log('g1s')
+    log(g1s)
+    log('g2s')
+    log(g2s)
+
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
