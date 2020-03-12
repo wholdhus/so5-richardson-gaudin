@@ -380,8 +380,15 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
 
 def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
     L, Ne, Nw = dims
-    scale = 1 - np.linspace(0, sf, steps)
-    for i, s in enumerate(scale):
+    # scale = 1 - np.linspace(0, sf, steps)
+    ds = 1./steps
+    s = 1.0
+    prev_vars = vars
+    prev_s = s
+    while s > 0:
+        log('s = {}'.format(s))
+        prev_vars = vars
+        prev_s = s
 
         kc = np.concatenate((k, s*im_k))
         sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
@@ -391,6 +398,27 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
         if er > 0.001:
             print('This is too bad')
             return
+        if er < TOL and ds < 0.1:
+            log('Error is small. Reducing ds')
+            ds *= 2
+            prev_s = s
+            prev_vars = vars
+            s -= ds
+        elif er > TOL2:
+            log('Badd error: {}'.format(er))
+            if ds > 10**-5:
+                log('Backing up and decreasing ds')
+                ds *= 0.5
+                vars = prev_vars
+                s = prev_s - ds
+        else:
+            prev_s = s
+            prev_vars =vars
+            s -= ds
+    # running at s = 0
+    kc = np.concatenate((k, np.zeros(L)))
+    sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
+                        max_steps=MAX_STEPS)
     return vars, er
 
 
@@ -544,7 +572,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     print('')
     print('Incrementing k to be real')
-    vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0)
+    vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0, steps=10*L)
     print('')
     kc = np.concatenate((k, np.zeros(L)))
     print('Now doing the rest of g steps')
