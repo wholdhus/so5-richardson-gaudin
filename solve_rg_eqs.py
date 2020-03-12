@@ -602,13 +602,13 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
 
 def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                  imscale_v=0.001, skip=10):
+                  imscale_v=0.001, skip=20):
     L, Ne, Nw = dims
     N = Ne + Nw
 
     Gf = g_to_G(gf, k)
     if gf > 0:
-        g2s = np.append(np.arange(g1, gf, dg), gf)
+        gs = np.append(np.arange(g0, gf, dg), gf)
     elif gf < 0:
         gs = np.append(-1*np.arange(-1*g0, -1*gf, dg), gf)
     log('gs')
@@ -617,20 +617,20 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
-    varss = []
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    if Nw%2==1:
-        ws[-1] = 0
     print(es)
     print(ws)
 
-    vars = pack_vars(es, ws)
-    print('')
-    print('Incrementing g with complex k from {} up to {}'.format(gs[0], g1))
+    # print('')
+    # print('Incrementing g with complex k from {} up to {}'.format(gs[0], gf))
     keep_going = True
     i = 0
+    varss = []
+    gss = []
+
     while i<len(gs) and keep_going:
+        g = gs[i]
         try:
             if i == 0:
                 print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
@@ -658,11 +658,13 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log(ces - k_full[np.arange(Ne)//2])
                 log('omegas - k:')
                 log(cws - k_full[np.arange(Nw)//2])
-            if i % skip == 0 or g == gf:
+            elif i % skip == 0 or g == gf:
                 log('Removing im(k) at g = {}'.format(g))
                 vars_r, er_r = increment_im_k(vars, dims, g, k, kim, sf=1.0,
                                               steps=3*L)
-                varss += [[vars_r]]
+                varss += [vars_r]
+                gss += [g]
+                log('Stored values at {}'.format(g))
             i += 1
             log('Finished with g = {}'.format(g))
         except Exception as e:
@@ -671,22 +673,27 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             keep_going = False
     if not keep_going:
         print('Terminated at g = {}'.format(g))
-        g2s = g2s[:i-1]
-        gf = g2s[-1]
+        gs = gs[:i-1]
+        gf = gs[-1]
         varss = varss[:, :i-1]
     print('')
     print('Final error:')
     print(er)
 
+    varss = np.array(varss)
+    gss = np.array(gss)
+    print(np.shape(varss))
+
     output_df = pandas.DataFrame({})
-    output_df['g'] = g2s
-    output_df['G'] = g_to_G(g2s, k)
+    output_df['g'] = gss
+    output_df['G'] = g_to_G(gss, k)
+
     for n in range(Ne):
-        output_df['Re(e_{})'.format(n)] = varss[n, :]
-        output_df['Im(e_{})'.format(n)] = varss[n+Ne, :]
-        output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
-        output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
-    output_df['energy'] = calculate_energies(varss, g2s, k, Ne)
+        output_df['Re(e_{})'.format(n)] = varss[:, n]
+        output_df['Im(e_{})'.format(n)] = varss[:, n+Ne]
+        output_df['Re(omega_{})'.format(n)] = varss[:, n+2*Ne]
+        output_df['Im(omega_{})'.format(n)] = varss[:, n+3*Ne]
+    output_df['energy'] = calculate_energies(np.transpose(varss), gss, k, Ne)
 
     ces, cws = unpack_vars(vars, Ne, Nw)
     return ces, cws, output_df

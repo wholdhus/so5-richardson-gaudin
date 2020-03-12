@@ -2,8 +2,14 @@ import sys
 import pandas as pd
 import matplotlib.pyplot as plt
 from solve_rg_eqs import np, solve_rgEqs, calculate_energies, G_to_g
+import json
 
-RESULT_FP = '/home/wholdhus/so5_results/'
+try:
+    with open('context.json') as f:
+        context = json.load(f)
+    RESULT_FP = context['results_filepath']
+except:
+    print('REQUIRED! context.json file with results_filepath entry')
 
 if len(sys.argv) < 4:
     print('Usage: python rg_hpc.py [L] [N] [G]')
