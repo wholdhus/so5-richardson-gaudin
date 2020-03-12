@@ -492,36 +492,16 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 imscale_v=0.001):
     L, Ne, Nw = dims
     N = Ne + Nw
-    # log('k:')
-    # log(k)
-    # log('')
-    gc = -.1/(L-N+1)
-    log('Problematic g: {}'.format(gc))
-    log('Final g: {}'.format(gf))
-    Gc = g_to_G(gc, k)
-    Gf = g_to_G(gf, k)
-    if np.sign(gf) == np.sign(gc) and np.abs(gf) > np.abs(gc):
-        log('Final coupling G = {} is past problematic point Gc = {}'.format(
-            Gf, Gc))
-        g1 = gc + 6*dg * np.sign(gf)
-        if gf > g1:
-            g1s = np.concatenate((np.arange(g0, gc - 4*dg, 0.25*dg),
-                                  np.arange(gc + 4*dg, g1, 0.25*dg),
-                                  [g1]))
-            g2s = np.append(np.arange(g1, gf, dg), gf)
-        else:
-            print('Woops, I need g > 0 for now')
+    g1 = 2*dg * np.sign(gf)
+    if gf > g1:
+        g1s = np.arange(g0, g1, 0.5*dg)
+        g2s = np.append(np.arange(g1, gf, dg), gf)
+    elif gf < g1:
+        g1s = -1*np.linspace(g0, -1*g1, 0.5*dg)
+        g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
     else:
-        g1 = 2*dg * np.sign(gf)
-        if gf > g1:
-            g1s = np.arange(g0, g1, 0.5*dg)
-            g2s = np.append(np.arange(g1, gf, dg), gf)
-        elif gf < g1:
-            g1s = -1*np.linspace(g0, -1*g1, 0.5*dg)
-            g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
-        else:
-            print('Woops: abs(gf) < abs(g1)')
-            return
+        print('Woops: abs(gf) < abs(g1)')
+        return
     log('g1s')
     log(g1s)
     log('g2s')
@@ -618,15 +598,99 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
         output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
     output_df['energy'] = calculate_energies(varss, g2s, k, Ne)
-    # log('Sum e_alpha')
-    # log(np.sum(ces))
-    # log('Sum k*Rk')
-    # rk = ioms(ces, g, k)
-    # log(np.sum(k*rk))
-    # log('Final energy')
-    # energies = np.array(output_df['energy'])*(1 - gf*np.sum(k))
-    # log(energies[-1])
     return ces, cws, output_df
+
+
+def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
+                  imscale_v=0.001, skip=10):
+    L, Ne, Nw = dims
+    N = Ne + Nw
+
+    Gf = g_to_G(gf, k)
+    if gf > 0:
+        g2s = np.append(np.arange(g1, gf, dg), gf)
+    elif gf < 0:
+        gs = np.append(-1*np.arange(-1*g0, -1*gf, dg), gf)
+    log('gs')
+    log(gs)
+
+    kim = imscale_k*(-1)**np.arange(L)
+    kc = np.concatenate((k, kim))
+    vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
+    varss = []
+    log('Initial guesses:')
+    es, ws = unpack_vars(vars, Ne, Nw)
+    if Nw%2==1:
+        ws[-1] = 0
+    print(es)
+    print(ws)
+
+    vars = pack_vars(es, ws)
+    print('')
+    print('Incrementing g with complex k from {} up to {}'.format(gs[0], g1))
+    keep_going = True
+    i = 0
+    while i<len(gs) and keep_going:
+        try:
+            if i == 0:
+                print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
+                sol = bootstrap_g0(dims, g0, kc, imscale_v)
+            else:
+                sol = find_root_multithread(vars, kc, g, dims, imscale_v,
+                                            max_steps=MAX_STEPS,
+                                            use_k_guess=True)
+            vars = sol.x
+            er = max(abs(rgEqs(vars, kc, g, dims)))
+            if er > 0.001 and i > 1:
+                print('This is too bad')
+                return
+            ces, cws = unpack_vars(vars, Ne, Nw)
+            if i == 0:
+                log('Status: {}'.format(sol.status))
+                log('Msg: {}'.format(sol.message))
+                log('Iterations: {}'.format(sol.nfev))
+                log('g = {}'.format(g))
+                log('er: {}'.format(er))
+                log('Solution vector:')
+                log(vars)
+                k_full = k + 1j*kim
+                log('es - k:')
+                log(ces - k_full[np.arange(Ne)//2])
+                log('omegas - k:')
+                log(cws - k_full[np.arange(Nw)//2])
+            if i % skip == 0 or g == gf:
+                log('Removing im(k) at g = {}'.format(g))
+                vars_r, er_r = increment_im_k(vars, dims, g, k, kim, sf=1.0,
+                                              steps=3*L)
+                varss += [[vars_r]]
+            i += 1
+            log('Finished with g = {}'.format(g))
+        except Exception as e:
+            print('Error during g incrementing')
+            print(e)
+            keep_going = False
+    if not keep_going:
+        print('Terminated at g = {}'.format(g))
+        g2s = g2s[:i-1]
+        gf = g2s[-1]
+        varss = varss[:, :i-1]
+    print('')
+    print('Final error:')
+    print(er)
+
+    output_df = pandas.DataFrame({})
+    output_df['g'] = g2s
+    output_df['G'] = g_to_G(g2s, k)
+    for n in range(Ne):
+        output_df['Re(e_{})'.format(n)] = varss[n, :]
+        output_df['Im(e_{})'.format(n)] = varss[n+Ne, :]
+        output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
+        output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
+    output_df['energy'] = calculate_energies(varss, g2s, k, Ne)
+
+    ces, cws = unpack_vars(vars, Ne, Nw)
+    return ces, cws, output_df
+
 
 
 if __name__ == '__main__':
