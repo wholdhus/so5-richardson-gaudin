@@ -11,12 +11,12 @@ import multiprocessing
 VERBOSE=True
 FORCE_GS=True
 TOL=10**-12
-TOL2=10**-8 # there are plenty of spurious minima around 10**-5
+TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
-FACTOR=1000
+FACTOR=100
 CPUS = multiprocessing.cpu_count()
 JOBS = 2*CPUS
-MAX_STEPS = 400
+MAX_STEPS = 100*JOBS
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,

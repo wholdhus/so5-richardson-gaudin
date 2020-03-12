@@ -18,10 +18,10 @@ Ne = N//2
 Nw = N//2
 
 
-dg = 0.0005*8/L
-g0 = dg/N
+dg = 0.001/L
+g0 = dg/L
 imk = g0
-imv = 0.1*g0
+imv = g0/N
 
 ks = (1.0*np.arange(L) + 1.0)/L
 
