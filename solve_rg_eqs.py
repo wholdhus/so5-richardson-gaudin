@@ -441,13 +441,27 @@ def calculate_energies(varss, gs, ks, Ne):
     Rs = np.zeros((len(gs), len(ks)))
     log('Calculating R_k, energy')
     for i, g in enumerate(gs):
-        ces, cws = unpack_vars(varss[:, i], Ne, Nw)
+        ces, cws = unpack_vars(varss[:, i], Ne, Ne)
         R = ioms(ces, g, ks)
         Rs[i, :] = np.real(R)
         log(R)
         energies[i] = np.sum(ks*np.real(R)) # /(1 - g*np.sum(ks))
         log(energies[i])
     return energies, Rs
+
+def calculate_n_k(Rs, gs):
+    dRs = np.zeros(np.shape(Rs))
+    nks = np.zeros(np.shape(Rs))
+    L = np.shape(Rs)[1]
+    for k in range(L):
+        Rk = Rs[:, k]
+        dRk = np.gradient(Rk, gs)
+        nk = 2*(Rk - gs * dRk)
+
+        dRs[:, k] = dRk
+        nks[:, k] = nk
+    return dRs, nks
+
 
 
 def bootstrap_g0(dims, g0, kc,
@@ -605,6 +619,7 @@ def solve_rgEqs_1(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
         output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
     output_df['energy'], Rs = calculate_energies(varss, g2s, k, Ne)
+
     return ces, cws, output_df
 
 
@@ -708,9 +723,13 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         output_df['Re(omega_{})'.format(n)] = varss[:, n+2*Ne]
         output_df['Im(omega_{})'.format(n)] = varss[:, n+3*Ne]
     output_df['energy'], Rs = calculate_energies(np.transpose(varss), gss, k, Ne)
+    dRs, nks = calculate_n_k(Rs, gss)
     for n in range(L):
         # print(np.shape(Rs[:, n]))
         output_df['R_{}'.format(n)] = Rs[:, n]
+        output_df['N_{}'.format(n)] = nks[:, n]
+
+
 
     # ces, cws = unpack_vars(varss[:, -1], Ne, Nw)
     return output_df
