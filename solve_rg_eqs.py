@@ -15,7 +15,7 @@ TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
-JOBS = 2*CPUS
+JOBS = CPUS
 MAX_STEPS = 100*JOBS
 
 lmd = {'maxiter': MAXIT,
@@ -323,7 +323,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs,
                     print_exc()
 
 def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
-                          use_k_guess=False, factor=1.5, force_gs=True,
+                          use_k_guess=False, factor=1.1, force_gs=True,
                           noise_factors=None):
     vars0 = vars
     L, Ne, Nw = dims
@@ -365,7 +365,6 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
         for i, r in enumerate(root_threads(vars0, noise_scale,
                               kc, g, dims, force_gs,
                               noise_factors=noise_factors)):
-            # print(r)
             sols[i], _, ers[i] = r
         er = np.min(ers)
         sol = sols[np.argmin(ers)]
@@ -378,7 +377,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
     #     log(vars - vars0)
     return sol
 
-def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
+def increment_im_k(vars, dims, g, k, im_k, steps=100):
     L, Ne, Nw = dims
     # scale = 1 - np.linspace(0, sf, steps)
     ds = 1./steps
@@ -391,14 +390,14 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
         prev_s = s
 
         kc = np.concatenate((k, s*im_k))
-        sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
-                        max_steps=MAX_STEPS)
+        sol = find_root_multithread(vars, kc, g, dims, max(s, 10**-4),
+                                    max_steps=MAX_STEPS)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 0.001:
             print('This is too bad')
             return
-        if er < TOL and ds < 0.1:
+        if er < TOL and ds < 0.08:
             log('Error is small. Reducing ds')
             ds *= 2
             prev_s = s
@@ -417,30 +416,38 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, sf=1):
             s -= ds
     # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
-    sol = find_root_multithread(vars, kc, g, dims, min(s, 10**-4),
-                        max_steps=MAX_STEPS)
+    sol = find_root_multithread(vars, kc, g, dims, max(s, 10**-4),
+                                max_steps=MAX_STEPS)
     return vars, er
 
 
-def ioms(es, g, ks, Zf=rationalZ, extra_bits=False):
+def ioms(es, g, ks, extra_bits=False):
     L = len(ks)
     R = np.zeros(L, dtype=np.complex128)
     for i, k in enumerate(ks):
-        Zke = Zf(k, es)
-        R[i] = g*np.sum(Zke)
+        R_r = g*np.sum(reZ(k, 0, np.real(es), np.imag(es)))
+        R_i = g*np.sum(imZ(k, 0, np.real(es), np.imag(es)))
+        R[i] = R_r + 1j*R_i
+        # R[i] = g*np.sum(rationalZ(k, es))
         if extra_bits:
             otherks = ks[np.arange(L) != i]
-            Zkk = Zf(k, otherks)
+            Zkk = rationalZ(k, otherks)
             R[i] += -1*g*np.sum(Zkk) + 1.0
     return R
 
 
 def calculate_energies(varss, gs, ks, Ne):
     energies = np.zeros(len(gs))
+    Rs = np.zeros((len(gs), len(ks)))
+    log('Calculating R_k, energy')
     for i, g in enumerate(gs):
-        R = np.real(ioms(varss[:Ne, i], g, ks))
-        energies[i] = np.sum(ks*R)/(1 - g*np.sum(ks))
-    return energies
+        ces, cws = unpack_vars(varss[:, i], Ne, Nw)
+        R = ioms(ces, g, ks)
+        Rs[i, :] = np.real(R)
+        log(R)
+        energies[i] = np.sum(ks*np.real(R)) # /(1 - g*np.sum(ks))
+        log(energies[i])
+    return energies, Rs
 
 
 def bootstrap_g0(dims, g0, kc,
@@ -488,8 +495,8 @@ def bootstrap_g0(dims, g0, kc,
     return sol
 
 
-def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                imscale_v=0.001):
+def solve_rgEqs_1(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
+                  imscale_v=0.001):
     L, Ne, Nw = dims
     N = Ne + Nw
     g1 = 2*dg * np.sign(gf)
@@ -552,7 +559,7 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     print('')
     print('Incrementing k to be real')
-    vars, er = increment_im_k(vars, dims, g, k, kim, sf=1.0, steps=10*L)
+    vars, er = increment_im_k(vars, dims, g, k, kim, steps=10*L)
     print('')
     kc = np.concatenate((k, np.zeros(L)))
     print('Now doing the rest of g steps')
@@ -597,18 +604,21 @@ def solve_rgEqs(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         output_df['Im(e_{})'.format(n)] = varss[n+Ne, :]
         output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
         output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
-    output_df['energy'] = calculate_energies(varss, g2s, k, Ne)
+    output_df['energy'], Rs = calculate_energies(varss, g2s, k, Ne)
     return ces, cws, output_df
 
 
 def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                  imscale_v=0.001, skip=20):
+                  imscale_v=0.001, skip=4):
     L, Ne, Nw = dims
     N = Ne + Nw
 
     Gf = g_to_G(gf, k)
     if gf > 0:
         gs = np.append(np.arange(g0, gf, dg), gf)
+        # Gs = np.append(np.arange(g0, Gf, dg), Gf)
+        # gs =  G_to_g(Gs, k) # so evenly spaced in G
+        Gs = g_to_G(gs, k)
     elif gf < 0:
         gs = np.append(-1*np.arange(-1*g0, -1*gf, dg), gf)
     log('gs')
@@ -660,9 +670,13 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log(cws - k_full[np.arange(Nw)//2])
             elif i % skip == 0 or g == gf:
                 log('Removing im(k) at g = {}'.format(g))
-                vars_r, er_r = increment_im_k(vars, dims, g, k, kim, sf=1.0,
-                                              steps=3*L)
+                vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
+                                              steps=10*L)
                 varss += [vars_r]
+                es, ws = unpack_vars(vars_r, Ne, Nw)
+                print('Variables after removing im(k)')
+                print(es)
+                print(ws)
                 gss += [g]
                 log('Stored values at {}'.format(g))
             i += 1
@@ -693,45 +707,31 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         output_df['Im(e_{})'.format(n)] = varss[:, n+Ne]
         output_df['Re(omega_{})'.format(n)] = varss[:, n+2*Ne]
         output_df['Im(omega_{})'.format(n)] = varss[:, n+3*Ne]
-    output_df['energy'] = calculate_energies(np.transpose(varss), gss, k, Ne)
+    output_df['energy'], Rs = calculate_energies(np.transpose(varss), gss, k, Ne)
+    for n in range(L):
+        # print(np.shape(Rs[:, n]))
+        output_df['R_{}'.format(n)] = Rs[:, n]
 
-    ces, cws = unpack_vars(vars, Ne, Nw)
-    return ces, cws, output_df
+    # ces, cws = unpack_vars(varss[:, -1], Ne, Nw)
+    return output_df
 
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    # r = rg_jac(np.arange(1,9), np.arange(1,9)/8, -10, (4, 2, 2))
-    # print('First row of Jacobian: ')
-    # print(r[0])
-    # print('First column of Jacobian: ')
-    # print(r[:, 0])
-    # print('Diagonal entries of the Jacobian: ')
-    # print(np.diagonal(r))
-    #
-    # print('Checking Zs')
-    # print(rationalZ(3+4j, 2-8j))
-    # print(reZ(3,4,2,-8))
-    # print(imZ(3,4,2,-8))
 
     L = int(input('Length: '))
     Ne = int(input('Nup: '))
     Nw = int(input('Ndown: '))
     Gf = float(input('G: '))
-
     JOBS = int(input('Number of concurrent jobs to run: '))
 
-    # dg = float(input('dg: '))
-    # imk = float(input('Scale of imaginary part for k: '))
-    # imv = float(input('Same for variable guess: '))
+    N = Ne + Nw
 
-    dg = 0.005*8/L
-    # dg = 0.005
-    g0 = .1*dg
-    imk = .5*dg/(Ne+Nw)
-    imk = g0
-    imv = 0.5*imk
+    dg = 0.005/L
+    g0 = .1*dg/L
+    imk = dg
+    imv = .1*g0/N
 
 
     dims = (L, Ne, Nw)
@@ -740,29 +740,24 @@ if __name__ == '__main__':
     gf = G_to_g(Gf, ks)
     print('Input G corresponds to g = {}'.format(gf))
 
-    es, ws, output_df = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
+    output_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
     print('')
     print('Solution found:')
-    print('e_alpha:')
-    for e in es:
-        print('{} + I*{}'.format(float(np.real(e)), np.imag(e)))
-        print('')
-    print('omega_beta')
-    for e in ws:
-        print('{} + I*{}'.format(float(np.real(e)), np.imag(e)))
-        print('')
+
+    output_df.to_csv('{}_{}_{}.csv'.format(L, Ne+Nw, Gf))
 
 
-    plt.scatter(output_df['G'], output_df['energy'])
-    plt.show()
-
-    Gf_actual = np.max(output_df['G'])
-    rge = np.max(output_df['energy'])
+    Gf_actual = np.array(output_df['G'])[-1]
+    rge = np.array(output_df['energy'])[-1]
 
     print('Energy: ')
     print(rge)
 
     dimH = binom(2*L, Ne)*binom(2*L, Nw)
+
+    plt.scatter(output_df['G'], output_df['energy'])
+    plt.show()
+
     print('Hilbert space dimension: {}'.format(dimH))
     keep_going = input('Input 1 to diagonalize: ')
     if keep_going == '1':
@@ -770,8 +765,9 @@ if __name__ == '__main__':
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
-        ho = ham_op(L, Gf_actual, ks, basis)
-        e, v = find_min_ev(ho, L, basis, n=10)
+        ho = ham_op(L, gf, ks, basis)
+        e, v = find_min_ev(ho, L, basis, n=min((dimH-1, 100)))
+        # e, v = ho.eigh()
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
         print(min(diffs))

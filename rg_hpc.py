@@ -1,7 +1,7 @@
 import sys
 import pandas as pd
 import matplotlib.pyplot as plt
-from solve_rg_eqs import np, solve_rgEqs, calculate_energies, G_to_g
+from solve_rg_eqs import np, solve_rgEqs_1, solve_rgEqs_2, G_to_g
 import json
 
 try:
@@ -23,11 +23,14 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-
-dg = 0.001/L
-g0 = dg/L
-imk = g0
-imv = g0/N
+if len(sys.argv) == 5:
+    dg = float(sys.argv[4])
+    g0 = 0.001*dg
+else:
+    dg = 0.005/L
+    g0 = .1*dg/L
+imk = dg
+imv = .1*g0/N
 
 ks = (1.0*np.arange(L) + 1.0)/L
 
@@ -51,12 +54,19 @@ print('')
 
 dims = (L, Ne, Nw)
 
-es, ws, vars_df = solve_rgEqs(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
+if L > Ne + Nw:
+    print('Below half filling!')
+    es, ws, vars_df = solve_rgEqs_1(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
                                     imscale_v=imv)
+else:
+    print('Above half filling!')
+    vars_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
+                                    imscale_v=imv, skip=4)
+
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'solutions_full_{}_{}_{}.csv'.format(L, N, gf))
 
 energies = vars_df['energy']
 
 plt.scatter(vars_df['G'], energies)
-plt.savefig(RESULT_FP + 'energies_full_{}_{}_{}.png'.format(L, N, gf))
+plt.savefig(RESULT_FP + 'figs/energies_full_{}_{}_{}.png'.format(L, N, np.round(Gf, 3)))
