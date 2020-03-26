@@ -94,12 +94,6 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
                     [0.5*Xskk, m_k1, p_k2, m_k1, p_k2],
                     [0.5*Xskk, m_k1, m_k2, m_k1, m_k2]
                     ]
-            smp += [
-                    [0.5*Xckk, p_k1, p_k2, p_k1, p_k2],
-                    [0.5*Xckk, p_k1, m_k2, p_k1, m_k2],
-                    [0.5*Xckk, m_k1, p_k2, m_k1, p_k2],
-                    [0.5*Xckk, m_k1, m_k2, m_k1, m_k2]
-                    ]
             samesame += [[0.5*Zkk, p_k1, p_k2],
                          [0.5*Zkk, p_k1, m_k2],
                          [0.5*Zkk, m_k1, p_k2],
@@ -123,10 +117,9 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
                 ['++--|', ppairing], ['--++|', ppairing],
                 ['+-|+-', zpairing], ['-+|-+', zpairing],
                 ['|++--', ppairing], ['|--++', ppairing],
-                ['+-|-+', spm], ['-+|+-', smp],
+                ['+-|-+', spm], ['-+|+-', spm],
                 ['nn|', samesame], # the up/down density density stuff cancels
                 ['|nn', samesame],
-                ['n|n', samesame],
                 ['n|', dens],
                 ['|n', dens]
                 ]
