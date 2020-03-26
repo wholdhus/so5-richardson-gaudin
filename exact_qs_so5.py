@@ -298,6 +298,7 @@ def make_plots():
 def ham_op(L, G, ks, basis, rescale_g=False):
     if rescale_g:
         g = G/(1+G*np.sum(ks))
+        print('g = {}'.format(g))
     else:
         g = G
     for i in range(L):

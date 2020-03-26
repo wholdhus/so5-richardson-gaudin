@@ -56,9 +56,9 @@ def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op(L, G, ks, basis)
-    hp = ham_op(L, G, ks, basisp)
-    hm = ham_op(L, G, ks, basism)
+    h = ham_op(L, G, ks, basis, rescale_g=True)
+    hp = ham_op(L, G, ks, basisp, rescale_g=True)
+    hm = ham_op(L, G, ks, basism, rescale_g=True)
     if n_states == -999:
         e, v = h.eigh()
         ep, vp = hp.eigh()
@@ -84,8 +84,8 @@ def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
 
     aks1 = np.zeros(steps)
     aks2 = np.zeros(steps)
-    lim = max(np.abs(G), 100)
-    omegas = 5*np.linspace(-1*lim*np.sum(ks[:N]), lim*np.sum(ks[:N]), steps)
+    lim = max(np.abs(G), 10)
+    omegas = 2*np.linspace(-1*lim*np.sum(ks[:N]), lim*np.sum(ks[:N]), steps)
     # omegas = np.linspace(np.min(e), np.max(e), steps)
     epsilon = np.abs(e[1]-e[0])
     for i, o in enumerate(omegas):
