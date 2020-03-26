@@ -4,6 +4,8 @@ from exact_qs_so5 import hamiltonian_dict, form_basis, find_min_ev, ham_op, find
 import numpy as np
 from scipy.sparse.linalg import eigsh
 
+from tqdm import tqdm
+
 def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
     gps = celts*epsilon/((omega + e0 - ep)**2 + epsilon**2)
     gms = delts*epsilon/((omega - e0 + em)**2 + epsilon**2)
@@ -24,7 +26,6 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
     bf is the basis for all N
     """
     print('Creating at {}th spot'.format(k))
-    print('Finding matrix elements')
     kl = [[1.0, k]]
     cl = [['+|', kl]]
     dl = [['-|', kl]]
@@ -40,10 +41,12 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
     # ld = len(vm[:,0])
     celts = np.zeros(lc, dtype=np.complex128)
     delts = np.zeros(ld, dtype=np.complex128)
-    for i in range(lc):
+    print('Finding creation matrix elts.')
+    for i in tqdm(range(lc)):
         v = bp.get_vec(vp[:, i], sparse=False)
         celts[i] = cp.matrix_ele(v, v0)
-    for j in range(ld):
+    print('Finding annihilation matrix elts.')
+    for j in tqdm(range(ld)):
         v = bm.get_vec(vm[:, j], sparse=False)
         delts[j] = cm.matrix_ele(v, v0)
     return np.abs(celts)**2, np.abs(delts)**2
