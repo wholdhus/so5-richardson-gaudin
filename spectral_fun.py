@@ -2,6 +2,7 @@ from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator
 from exact_qs_so5 import hamiltonian_dict, form_basis, find_min_ev, ham_op, find_nk
 import numpy as np
+from scipy.sparse.linalg import eigsh
 
 def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
     gps = celts*epsilon/((omega + e0 - ep)**2 + epsilon**2)
@@ -64,9 +65,12 @@ def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
         ep, vp = hp.eigh()
         em, vm = hm.eigh()
     else:
-        e, v = find_min_ev(h, L, basis, n_states)
-        ep, vp = find_min_ev(hp, L, basisp, n_states)
-        em, vm = find_min_ev(hm, L, basism, n_states)
+        # e, v = find_min_ev(h, L, basis, n_states)
+        # ep, vp = find_min_ev(hp, L, basisp, n_states)
+        # em, vm = find_min_ev(hm, L, basism, n_states)
+        e, v = eigsh(h.aslinearoperator(), k=n_states, which='SA')
+        ep, vp = eigsh(hp.aslinearoperator(), k=n_states, which='SA')
+        em, vm = eigsh(hm.aslinearoperator(), k=n_states, which='SA')
     if steps is None:
         steps = 10*len(e)
 
