@@ -1,5 +1,6 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator
+from quspin.tools.misc import matvec
 from exact_qs_so5 import hamiltonian_dict, form_basis, find_min_ev, ham_op, find_nk
 import numpy as np
 from scipy.sparse.linalg import eigsh
@@ -35,6 +36,9 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
                           check_herm=False)
     cm = quantum_operator(dd, basis=bf, check_symm=False,
                           check_herm=False)
+
+    cp_lo = cp.aslinearoperator()
+    cm_lo = cm.aslinearoperator()
     lc = len(vp[0, :])
     ld = len(vm[0, :])
     # lc = len(vp[:,0])
@@ -44,11 +48,17 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
     print('Finding creation matrix elts.')
     for i in tqdm(range(lc)):
         v = bp.get_vec(vp[:, i], sparse=False)
-        celts[i] = cp.matrix_ele(v, v0)
+        cpv = matvec(cp_lo, v0)
+        # print(np.shape(cpv))
+        # print(type(cpv))
+        celts[i] = np.vdot(v, cpv)
+        # celts[i] = cp.matrix_ele(v, v0)
     print('Finding annihilation matrix elts.')
     for j in tqdm(range(ld)):
         v = bm.get_vec(vm[:, j], sparse=False)
-        delts[j] = cm.matrix_ele(v, v0)
+        cmv = matvec(cm_lo, v0)
+        delts[j] = np.vdot(v, cmv)
+        # delts[j] = cm.matrix_ele(v, v0)
     return np.abs(celts)**2, np.abs(delts)**2
 
 def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
