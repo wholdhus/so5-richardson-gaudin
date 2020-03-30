@@ -38,8 +38,13 @@ df['a_k_omega_1'] = aks1
 df['a_k_omega_2'] = aks2
 df['omega'] = omegas
 
+df2 = pd.DataFrame({})
+df['n_k'] = ns
+df['k'] = ks
+
 print('Done! Putting things in a CSV')
 df.to_csv(RESULT_FP + 'spectral_functions_{}_{}_{}.csv'.format(L, N, np.round(G, 3)))
+df2.to_csv(RESULT_FP + 'occupations_{}_{}_{}'.format(L, N, np.round(G, 3)))
 
 plt.scatter(omegas, aks1)
 plt.savefig(RESULT_FP + 'figs/spectral_function_{}_{}_{}.png'.format(L, N, np.round(G, 3)))
