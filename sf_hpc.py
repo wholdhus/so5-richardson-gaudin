@@ -39,8 +39,8 @@ df['a_k_omega_2'] = aks2
 df['omega'] = omegas
 
 df2 = pd.DataFrame({})
-df['n_k'] = ns
-df['k'] = ks
+df2['n_k'] = ns
+df2['k'] = np.concatenate((-1*ks[::-1], ks))
 
 print('Done! Putting things in a CSV')
 df.to_csv(RESULT_FP + 'spectral_functions_{}_{}_{}.csv'.format(L, N, np.round(G, 3)))
