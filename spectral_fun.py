@@ -1,22 +1,25 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator
-from quspin.tools.misc import matvec
+# from quspin.tools.misc import matvec
 from exact_qs_so5 import hamiltonian_dict, form_basis, find_min_ev, ham_op, find_nk
 import numpy as np
 from scipy.sparse.linalg import eigsh
 
 from tqdm import tqdm
 
+
 def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
-    gps = celts*epsilon/((omega + e0 - ep)**2 + epsilon**2)
-    gms = delts*epsilon/((omega - e0 + em)**2 + epsilon**2)
+    # gps = -2j*celts*epsilon/((omega - ep)**2 + epsilon**2)
+    # gms = 2j*delts*epsilon/((omega + em)**2 + epsilon**2)
+    gps = -2j*celts*epsilon/((omega + e0 - ep)**2 + epsilon**2)
+    gms = 2j*delts*epsilon/((omega - e0 + em)**2 + epsilon**2)
 
-    gp2 = celts/(omega - ep + e0 + 1j*epsilon)
+    gp2 = celts/(omega - ep +  e0 + 1j*epsilon)
     gm2 = delts/(omega + em - e0 - 1j*epsilon)
-    # print(np.max(np.abs(gp2)))
-    # print(np.max(np.abs(gm2)))
+    # gp2 = celts/(omega - ep +  1j*epsilon)
+    # gm2 = delts/(omega + em - 1j*epsilon)
+    return (np.sum(gps) - np.sum(gms)).imag/(-2*np.pi), (np.sum(gm2) - np.sum(gp2)).imag/np.pi
 
-    return (np.sum(gps) - np.sum(gms))/(np.pi), 1j*(np.sum(gp2) + np.sum(gm2))/np.pi
 
 def matrix_elts(k, v0, vp, vm, bp, bm, bf):
     """
@@ -46,17 +49,19 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
     celts = np.zeros(lc, dtype=np.complex128)
     delts = np.zeros(ld, dtype=np.complex128)
     print('Finding creation matrix elts.')
+    cpv = cp_lo.dot(v0)
+    cmv = cm_lo.dot(v0)
     for i in tqdm(range(lc)):
         v = bp.get_vec(vp[:, i], sparse=False)
-        cpv = matvec(cp_lo, v0)
-        # print(np.shape(cpv))
-        # print(type(cpv))
+        # cpv = matvec(cp_lo, v0)
+        # cpv = cp_lo.dot(v0)
         celts[i] = np.vdot(v, cpv)
         # celts[i] = cp.matrix_ele(v, v0)
     print('Finding annihilation matrix elts.')
     for j in tqdm(range(ld)):
         v = bm.get_vec(vm[:, j], sparse=False)
-        cmv = matvec(cm_lo, v0)
+        # cmv = matvec(cm_lo, v0)
+        # cmv = cm_lo.dot(v0)
         delts[j] = np.vdot(v, cmv)
         # delts[j] = cm.matrix_ele(v, v0)
     return np.abs(celts)**2, np.abs(delts)**2
@@ -101,10 +106,8 @@ def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
 
     aks1 = np.zeros(steps)
     aks2 = np.zeros(steps)
-    lim = max(np.abs(G), 10)
-    omegas = 2*np.linspace(-1*lim*np.sum(ks[:N]), lim*np.sum(ks[:N]), steps)
-    # omegas = np.linspace(np.min(e), np.max(e), steps)
-    epsilon = np.abs(e[1]-e[0])
+    omegas = np.linspace(-1*np.max(np.abs(e)), np.max(np.abs(e)), steps)
+    epsilon = np.mean(np.diff(omegas))
     for i, o in enumerate(omegas):
         aks1[i], aks2[i] = akboth(o, celts, delts, e0, ep, em, epsilon=epsilon)
     #     print(o)
@@ -113,50 +116,42 @@ def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
     ns = find_nk(L, v[:,0], basis)
     return aks1, aks2, omegas, ns
 
+
+def check_nonint_spectral_fun(L, N, disp, steps=1000):
+    ks = np.arange(L, 2*L)
+    plt.figure(figsize=(12, 8))
+    for k in ks:
+        print('')
+        a1, a2, om, ns = find_spectral_fun(L, N, 0, disp, k=k, steps=steps)
+        peak_i = np.argmax(a1)
+        peak_om = om[peak_i]
+        print('Omega at peak value:')
+        print(peak_om)
+        print('This should be:')
+        print(disp[k-L])
+        print('omega - epsilon_k:')
+        print(peak_om - disp[k-L])
+        print('Integrals')
+        print(np.trapz(a1, om))
+        print(np.trapz(a2, om))
+        plt.scatter(om, a2, label = '{}th level'.format(k))
+    plt.xlim(0, 1.5*max(disp))
+    plt.legend()
+    plt.xlabel('Omega')
+    plt.ylabel('A(k,omega)')
+    plt.title('L = {}, N = {}'.format(L, 2*N))
+
+    for d in disp:
+        plt.axvline(d)
+
+    plt.show()
+
+
 if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
 
-    L = int(input('Length: '))
-    Nup = int(input('Spin up fermions: '))
-    Ndown = int(input('Spin down fermions: '))
-    G = float(input('G: '))
-    ind = int(input('Which index? '))
-    steps = int(input('Integration steps: '))
-    n_states = int(input('How many states to find (-999 for complete): '))
-
-
-    N = Nup + Ndown
-
+    L = 4
+    N = 2
     ks = np.arange(1, L+1)*np.pi/L
-
-    aks1, aks2, os, ns = find_spectral_fun(L, N, G, ks, k=ind, n_states=n_states, steps=steps)
-
-    ak01, ak02, o0s, n0s = find_spectral_fun(L, N, 0, ks, k=ind, n_states=n_states, steps=steps)
-
-    aks1 = np.abs(aks1)
-    aks2 = np.abs(aks2)
-    print(np.sum(ns))
-    print(np.sum(n0s))
-    print('Integrals!')
-
-    print(np.trapz(aks1, os))
-    print(np.trapz(aks2, os))
-    print(np.trapz(ak01, o0s))
-    print(np.trapz(ak02, o0s))
-
-    plt.figure(figsize=(12, 8))
-
-    plt.subplot(2,1,1)
-    plt.scatter(os, aks1, label='G={}, method 1'.format(G), s=10, marker='x')
-    plt.scatter(os, aks2, label='G={}, method 2'.format(G), s=10, marker='+')
-
-    plt.scatter(o0s, ak01, label='G=0, method 1', s=10, marker='x')
-    plt.scatter(o0s, ak02, label='G=0, method 2', s=10, marker='+')
-    plt.legend()
-
-    plt.subplot(2,1,2)
-    plt.scatter(np.concatenate((-1*ks[::-1], ks)), ns, label='G={}'.format(G))
-    plt.scatter(np.concatenate((-1*ks[::-1], ks)), n0s, label='G=0')
-    plt.legend()
-    plt.show()
+    check_nonint_spectral_fun(L, N, ks, steps=10**4)

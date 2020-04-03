@@ -42,6 +42,10 @@ df2 = pd.DataFrame({})
 df2['n_k'] = ns
 df2['k'] = np.concatenate((-1*ks[::-1], ks))
 
+print('Integrals:')
+print(np.trapz(aks1, omegas))
+print(np.trapz(aks2, omegas))
+
 print('Done! Putting things in a CSV')
 df.to_csv(RESULT_FP + 'spectral_functions_{}_{}_{}.csv'.format(L, N, np.round(G, 3)))
 df2.to_csv(RESULT_FP + 'occupations_{}_{}_{}'.format(L, N, np.round(G, 3)))

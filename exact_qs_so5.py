@@ -296,13 +296,15 @@ def make_plots():
 
 
 def ham_op(L, G, ks, basis, rescale_g=False):
+    factor = 1
     if rescale_g:
         g = G/(1+G*np.sum(ks))
         print('g = {}'.format(g))
+        factor = 2/(1-g*np.sum(ks))
     else:
         g = G
     for i in range(L):
-        id = iom_dict(L, g, ks, k1=i, mult=ks[i], kin=1)
+        id = iom_dict(L, g, ks, k1=i, mult=ks[i]*factor, kin=1)
         if i == 0:
             h = quantum_operator(id, basis=basis)
         else:
