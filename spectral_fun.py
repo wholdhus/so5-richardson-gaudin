@@ -3,9 +3,25 @@ from quspin.operators import quantum_operator
 # from quspin.tools.misc import matvec
 from exact_qs_so5 import hamiltonian_dict, form_basis, find_min_ev, ham_op, find_nk
 import numpy as np
-from scipy.sparse.linalg import eigsh
-
+# from scipy.sparse.linalg import eigsh
 from tqdm import tqdm
+from scipy.linalg import eigh_tridiagonal
+
+
+def reduce_state(v, full_basis, target_basis, test=False):
+    v_out = np.zeros(len(target_basis.states), dtype=np.complex128)
+    for i, s in enumerate(target_basis.states):
+        full_ind = np.where(full_basis.states == s)[0][0]
+        v_out[i] = v[full_ind]
+    if test:
+        vf = target_basis.get_vec(v_out, sparse=False)
+        print('<vin|vout>')
+        print(np.vdot(v, vf))
+        print('| |vin> - |vout> |')
+        print(np.linalg.norm(v - vf))
+        print('Equal?')
+        print((v == vf).all())
+    return v_out/np.linalg.norm(v_out)
 
 
 def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
@@ -42,6 +58,8 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
 
     cp_lo = cp.aslinearoperator()
     cm_lo = cm.aslinearoperator()
+    cpv = cp_lo.dot(v0)
+    cmv = cm_lo.dot(v0)
     lc = len(vp[0, :])
     ld = len(vm[0, :])
     # lc = len(vp[:,0])
@@ -49,8 +67,7 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
     celts = np.zeros(lc, dtype=np.complex128)
     delts = np.zeros(ld, dtype=np.complex128)
     print('Finding creation matrix elts.')
-    cpv = cp_lo.dot(v0)
-    cmv = cm_lo.dot(v0)
+
     for i in tqdm(range(lc)):
         v = bp.get_vec(vp[:, i], sparse=False)
         # cpv = matvec(cp_lo, v0)
@@ -65,6 +82,7 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
         delts[j] = np.vdot(v, cmv)
         # delts[j] = cm.matrix_ele(v, v0)
     return np.abs(celts)**2, np.abs(delts)**2
+
 
 def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
     Nup = N//2
@@ -86,9 +104,12 @@ def find_spectral_fun(L, N, G, ks, k=None, n_states=-999, steps=None):
         # e, v = find_min_ev(h, L, basis, n_states)
         # ep, vp = find_min_ev(hp, L, basisp, n_states)
         # em, vm = find_min_ev(hm, L, basism, n_states)
-        e, v = eigsh(h.aslinearoperator(), k=n_states, which='SA')
-        ep, vp = eigsh(hp.aslinearoperator(), k=n_states, which='SA')
-        em, vm = eigsh(hm.aslinearoperator(), k=n_states, which='SA')
+        # e, v = eigsh(h.aslinearoperator(), k=1, which='SA')
+        # ep, vp = eigsh(hp.aslinearoperator(), k=n_states, which='SA')
+        # em, vm = eigsh(hm.aslinearoperator(), k=n_states, which='SA')
+        e, v = h.eigsh(k=1, which='SA')
+        ep, vp = hp.eigsh(k=n_states, which='SA')
+        em, vm = hm.eigsh(k=n_states, which='SA')
     if steps is None:
         steps = 10*len(e)
 
@@ -147,11 +168,137 @@ def check_nonint_spectral_fun(L, N, disp, steps=1000):
     plt.show()
 
 
+def lanczos(v0, H, order, test=True):
+
+    # Normalizing v0:
+    v0 *= 1./np.linalg.norm(v0)
+
+    lvs = np.zeros((len(v0), order), dtype=np.complex128)
+    lvs[:, 0] = v0
+    alphas = np.zeros(order, dtype=np.float64)
+    betas = np.zeros(order, dtype=np.float64)
+    last_v = np.zeros(len(v0))
+    last_lambda = 0
+    for i in range(order):
+        v = lvs[:, i]
+        hv = H.dot(v)
+        alphas[i] = np.vdot(hv, v)
+        if i != 0:
+            betas[i] = np.linalg.norm(lvs[:, i - 1])
+            if betas[i] < 1000:
+                print('WARNING: BETA IS SMALL')
+                print('{}th step: alpha = {}, beta = {}'.format(i, alphas[i], betas[i]))
+            lvs[:, i-1] *= 1./betas[i]
+            last_v = lvs[:, -1]
+        w = hv - betas[i] * last_v - alphas[i] * v
+        # print('Reorthonormalizing!')
+        for j in range(i):
+            tau = lvs[:, j] # already normalized
+            coeff = np.vdot(w, tau)
+            w += -1*coeff*tau
+        last_v = v
+
+        if i + 1 < order:
+            lvs[:, i+1] = w
+            evals, _ = eigh_tridiagonal(alphas[:i+1], betas[1:i+1])
+            print('Converged?')
+            cvg = np.abs((min(evals) - last_lambda)/min(evals))
+            print(cvg)
+            last_lambda = min(evals)
+    lvs[:, -1] *= 1./np.linalg.norm(lvs[:, -1])
+
+    if test:
+        es, _ = np.linalg.eig(H)
+        print('Testing:')
+        evs, _ = eigh_tridiagonal(alphas, betas[1:])
+        print('Eigenvalues of Lanczos matrix')
+        print(evs)
+        for i, e in enumerate(evs):
+            diff_e = np.abs(es - e)
+            if np.min(diff_e) > 10**-6:
+                print('{}th eigenvalue is bad: difference is...'.format(i))
+                print(np.min(diff_e))
+    return alphas, betas[1:], lvs
+
+
+def lanczos_coeffs(v0, h, op, full_basis, target_basis, order):
+    # Get lanczos vectors, matrix
+    # H should be in the target basis
+    # op is c dagger or c or whatever
+    # Follow formula
+    # $$$$Profit????
+
+    v = reduce_state(op.dot(v0), full_basis, target_basis)
+
+    alphas, betas, vec = lanczos(v, h, order)
+
+    coeffs = (vec[0, :]*vec[0, :].conjugate())
+    e = eigh_tridiagonal(alphas, betas, eigvals_only=True)
+    # Now constructing sum_i |c_i|^2 delta(omega-(e_i - e_0))
+    # Just do this in a different function actually
+    return coeffs, e
+
+
+def lanczos_akw(L, N, G, order, k=None):
+    Nup = N//2
+    Ndown = N//2
+    if k is None:
+        k = L + Nup//2
+    basis = form_basis(2*L, Nup, Ndown)
+    basism = form_basis(2*L, Nup-1, Ndown)
+    basisp = form_basis(2*L, Nup+1, Ndown)
+    basisf = spinful_fermion_basis_1d(2*L)
+    h = ham_op(L, G, ks, basis, rescale_g=True)
+    hp = ham_op(L, G, ks, basisp, rescale_g=True)
+    hm = ham_op(L, G, ks, basism, rescale_g=True)
+    e, v = h.eigsh(k=1, which='SA')
+    ef, _ = h.eigsh(k=1, which='LA')
+    steps = 2*order
+
+    e0 = min(e)
+    ef = ef[0]
+    print('')
+    print('Eigenvalues:')
+    print(e0)
+    print(ef)
+    v0 = basis.get_vec(v[:,0], sparse=False)
+    kl = [[1.0, k]]
+    cl = [['+|', kl]]
+    dl = [['-|', kl]]
+    cd = {'static': cl}
+    dd = {'static': dl}
+    cp = quantum_operator(cd, basis=basisf, check_symm=False,
+                          check_herm=False)
+    cm = quantum_operator(dd, basis=basisf, check_symm=False,
+                          check_herm=False)
+
+    cp_lo = cp.aslinearoperator()
+    cm_lo = cm.aslinearoperator()
+    print('')
+    print('Performing Lanczos for c^+')
+    coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp, order)
+    print('')
+    print('Performing Lanczos for c^-')
+    coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism, order)
+
+    aks1 = np.zeros(steps)
+    aks2 = np.zeros(steps)
+    omegas = np.linspace(e0, ef, steps)
+    epsilon = np.mean(np.diff(omegas))
+    for i, o in enumerate(omegas):
+        aks1[i], aks2[i] = akboth(o, coeffs_plus, coeffs_minus,
+                                  e0, e_plus, e_minus, epsilon=epsilon)
+    return aks1, aks2, omegas
+
+
 if __name__ == '__main__':
 
     import matplotlib.pyplot as plt
-
-    L = 4
-    N = 2
-    ks = np.arange(1, L+1)*np.pi/L
-    check_nonint_spectral_fun(L, N, ks, steps=10**4)
+    dim = 200
+    # mat = 0.01 * np.random.rand(20, 20) + np.diag(np.arange(20))
+    mat = np.random.rand(dim, dim)
+    mat += np.transpose(mat)
+    print('Am I HErmitian?')
+    print((mat == np.transpose(mat)).all())
+    print('Performing Lanczos on a random matrix!')
+    a, b, v = lanczos(0.5 - np.random.rand(dim), mat, 60, test=True)
