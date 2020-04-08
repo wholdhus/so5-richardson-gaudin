@@ -1,5 +1,5 @@
 from exact_qs_so5 import spinful_fermion_basis_1d, quantum_operator
-from spectral_fun import lanczos, lanczos_coeffs
+from spectral_fun import lanczos, lanczos_coeffs, akboth
 import numpy as np
 
 """
@@ -37,16 +37,16 @@ def hubbard_akw(L, N, t, u, kx, ky, order, lanczos_steps=None):
     basis = spinful_fermion_basis_1d(V, Nf=(N//2, N//2))
     basisp = spinful_fermion_basis_1d(V, Nf=(N//2+1, N//2))
     basism = spinful_fermion_basis_1d(V, Nf=(N//2-1, N//2))
-    full_basis = spinful_fermion_basis_1d(V)
+    basisf = spinful_fermion_basis_1d(V)
 
     h = quantum_operator(hd, basis=basis)
     hp = quantum_operator(hd, basis=basisp)
     hm = quantum_operator(hd, basis=basism)
     print('Hamiltonians formed!')
     print('Finding lowest-energy eigenpair')
-    e0, v0 = h.eighsh(k=1, which='SA')
+    e0, v0 = h.eigsh(k=1, which='SA')
     ef, _ = h.eigsh(k=1, which='LA')
-    steps = 2*order
+    steps = 10*order
     e0 = e0[0]
     ef = ef[0]
     v0 = basis.get_vec(v0[:, 0], sparse=False)
@@ -54,10 +54,11 @@ def hubbard_akw(L, N, t, u, kx, ky, order, lanczos_steps=None):
     c_lst = []
     for x in range(L):
         for y in range(L):
-            c_lst += [np.exp[1j*(kx*x + ky*y)], x, y]
-    cp = quantum_operator({'static': [['+', c_lst]]}, basis=full_basis,
-                                check_herm=False)
-    cm = quantum_operator({'static': [['-', c_lst]]}, basis=full_basis,
+            c_lst += [[np.exp(1j*(kx*x + ky*y)), (x+1)*(y+1) -1]]
+
+    cp = quantum_operator({'static': [['+|', c_lst]]}, basis=basisf,
+                          check_herm=False)
+    cm = quantum_operator({'static': [['-|', c_lst]]}, basis=basisf,
                          check_herm=False)
     cp_lo = cp.aslinearoperator()
     cm_lo = cm.aslinearoperator()
@@ -65,15 +66,16 @@ def hubbard_akw(L, N, t, u, kx, ky, order, lanczos_steps=None):
     print('')
     print('Performing Lanczos for c^+')
     coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp,
-                                         lanczos_steps)
+                                         lanczos_steps, k=order)
     print('')
     print('Performing Lanczos for c^-')
-    coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism,
-                                           lanczos_steps)
-
+    # coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism,
+    #                                        lanczos_steps)
+    coeffs_minus, e_minus = np.zeros(order), np.zeros(order)
     aks1 = np.zeros(steps)
     aks2 = np.zeros(steps)
-    omegas = np.linspace(e0, ef, steps)
+    e_mag = np.max(np.abs((e0, ef)))
+    omegas = np.linspace(-10*e_mag, 10*e_mag, steps)
     epsilon = np.mean(np.diff(omegas))
     for i, o in enumerate(omegas):
         aks1[i], aks2[i] = akboth(o, coeffs_plus[:order], coeffs_minus[:order],
@@ -83,16 +85,27 @@ def hubbard_akw(L, N, t, u, kx, ky, order, lanczos_steps=None):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    from scipy.special import binom
     L = 4
     t = 1
     u = 10
     N = 2
-    kx = 0
-    ky = 0
-    order = 30
-    a1, a2, o = hubbard_akw(L, N, t, u, kx, ky, order)
-    print('Integrals:')
-    print(np.trapz(a1, o))
-    print(np.trapz(a2, o))
-    plt.scatter(o, a1)
-    plt.show()
+    kx = np.pi
+    ky = np.pi
+    dim_h = binom(L**2, N//2)*binom(L**2, N//2)
+    orders = np.arange(5, dim_h//2, 4, dtype=int)
+    for order in orders:
+        print('')
+        try:
+            print('Running with {} eigenvalues'.format(order))
+            a1, a2, o = hubbard_akw(L, N, t, u, kx, ky, order)
+            print('Integrals at {}th order:'.format(order))
+            print(np.trapz(a1, o))
+            print(np.trapz(a2, o))
+            plt.plot(o, a1, label=order)
+        except Exception as e:
+            print('Failed at {}th order'.format(order))
+            print(e)
+            raise
+    plt.legend()
+    plt.savefig('hubbard_spectral_fun_{}_{}_{}.png'.format(L, N, int(u/t)))

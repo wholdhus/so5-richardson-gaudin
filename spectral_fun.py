@@ -168,8 +168,9 @@ def check_nonint_spectral_fun(L, N, disp, steps=1000):
     plt.show()
 
 
-def lanczos(v0, H, order, test=True):
-
+def lanczos(v0, H, order, test=True, k=None):
+    if k is None:
+        k = order
     # Normalizing v0:
     v0 *= 1./np.linalg.norm(v0)
 
@@ -179,33 +180,43 @@ def lanczos(v0, H, order, test=True):
     betas = np.zeros(order, dtype=np.float64)
     last_v = np.zeros(len(v0))
     last_lambda = 0
-    for i in range(order):
+    last_other = 0
+    beta = 0
+    converged = False
+    i = 0
+    stop = False
+    while i < order and not converged and not stop:
         v = lvs[:, i]
         hv = H.dot(v)
         alphas[i] = np.vdot(hv, v)
-        if i != 0:
-            betas[i] = np.linalg.norm(lvs[:, i - 1])
-            if betas[i] < 1000:
-                print('WARNING: BETA IS SMALL')
-                print('{}th step: alpha = {}, beta = {}'.format(i, alphas[i], betas[i]))
-            lvs[:, i-1] *= 1./betas[i]
-            last_v = lvs[:, -1]
-        w = hv - betas[i] * last_v - alphas[i] * v
+        w = hv - beta * last_v - alphas[i] * v
         # print('Reorthonormalizing!')
         for j in range(i):
             tau = lvs[:, j] # already normalized
             coeff = np.vdot(w, tau)
             w += -1*coeff*tau
         last_v = v
-
         if i + 1 < order:
-            lvs[:, i+1] = w
-            evals, _ = eigh_tridiagonal(alphas[:i+1], betas[1:i+1])
-            print('Converged?')
-            cvg = np.abs((min(evals) - last_lambda)/min(evals))
-            print(cvg)
+            betas[i+1] = np.linalg.norm(w)
+            if i > 1 and betas[i+1] < 10**-6:
+                print('{}th step: beta too small'.format(i))
+                print(beta)
+                stop = True
+            lvs[:, i+1] = w/betas[i+1]
+            evals = np.sort(eigh_tridiagonal(alphas[:i+1], betas[1:i+1], eigvals_only=True))
+            # print('Converged?')
+            # cvg = np.abs((min(evals) - last_lambda)/min(evals))
+            # print(cvg)
+            if i >= k:
+                print('{} step: change in {}th eigenvalue'.format(i, k))
+                cvg2 = np.min(np.abs(evals[k] - last_other))
+                print(cvg2)
+                last_other = evals[k]
+                if cvg2 < 10**-8:
+                    converged=True
             last_lambda = min(evals)
-    lvs[:, -1] *= 1./np.linalg.norm(lvs[:, -1])
+        i += 1
+    lvs[:, i-1] *= 1./np.linalg.norm(lvs[:, i-1])
 
     if test:
         es, _ = np.linalg.eig(H)
@@ -221,22 +232,19 @@ def lanczos(v0, H, order, test=True):
     return alphas, betas[1:], lvs
 
 
-def lanczos_coeffs(v0, h, op, full_basis, target_basis, order):
+def lanczos_coeffs(v0, h, op, full_basis, target_basis, order, k=None):
     # Get lanczos vectors, matrix
     # H should be in the target basis
     # op is c dagger or c or whatever
     # Follow formula
     # $$$$Profit????
-
     v = reduce_state(op.dot(v0), full_basis, target_basis)
 
-    alphas, betas, vec = lanczos(v, h, order)
+    alphas, betas, vec = lanczos(v, h, order, test=False, k=k)
 
-    coeffs = (vec[0, :]*vec[0, :].conjugate())
-    e = eigh_tridiagonal(alphas, betas, eigvals_only=True)
-    # Now constructing sum_i |c_i|^2 delta(omega-(e_i - e_0))
-    # Just do this in a different function actually
-    return coeffs, e
+    es, vs = eigh_tridiagonal(alphas, betas)
+    coeffs = np.abs(vs[0, :])**2 # first entries squared
+    return coeffs, es
 
 
 def lanczos_akw(L, N, G, order, k=None):
@@ -279,12 +287,15 @@ def lanczos_akw(L, N, G, order, k=None):
     coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp, order)
     print('')
     print('Performing Lanczos for c^-')
+    print('')
     coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism, order)
 
     aks1 = np.zeros(steps)
     aks2 = np.zeros(steps)
-    omegas = np.linspace(e0, ef, steps)
+    e_mag = np.max(np.abs((e0, ef)))
+    omegas = np.linspace(-5*e_mag, 5*e_mag, steps)
     epsilon = np.mean(np.diff(omegas))
+    Gcs = np.zeros(steps)
     for i, o in enumerate(omegas):
         aks1[i], aks2[i] = akboth(o, coeffs_plus, coeffs_minus,
                                   e0, e_plus, e_minus, epsilon=epsilon)
