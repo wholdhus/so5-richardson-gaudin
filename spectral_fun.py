@@ -208,11 +208,11 @@ def lanczos(v0, H, order, test=True, k=None):
             # cvg = np.abs((min(evals) - last_lambda)/min(evals))
             # print(cvg)
             if i >= k:
-                print('{} step: change in {}th eigenvalue'.format(i, k))
+                print('{}th step: change in {}th eigenvalue'.format(i, k))
                 cvg2 = np.min(np.abs(evals[k] - last_other))
                 print(cvg2)
                 last_other = evals[k]
-                if cvg2 < 10**-8:
+                if cvg2 < 10**-7:
                     converged=True
             last_lambda = min(evals)
         i += 1
@@ -238,8 +238,10 @@ def lanczos_coeffs(v0, h, op, full_basis, target_basis, order, k=None):
     # op is c dagger or c or whatever
     # Follow formula
     # $$$$Profit????
-    v = reduce_state(op.dot(v0), full_basis, target_basis)
-
+    op_v0 = op.matvec(v0)
+    print('Initial state created. Reducing to smaller basis')
+    v = reduce_state(op_v0, full_basis, target_basis)
+    print('Performing {}th order Lanczos algorithm'.format(k))
     alphas, betas, vec = lanczos(v, h, order, test=False, k=k)
 
     es, vs = eigh_tridiagonal(alphas, betas)

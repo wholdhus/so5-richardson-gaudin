@@ -29,9 +29,10 @@ def hubbard_dict(L, t, u):
     return hub_dict
 
 
-def hubbard_akw(L, N, t, u, kx, ky, order, lanczos_steps=None):
+def hubbard_akw(L, N, t, u, kx, ky, orders, lanczos_steps=None):
+    order = np.max(orders)
     if lanczos_steps is None:
-        lanczos_steps = 2*order
+        lanczos_steps = 2*np.max(orders)
     V = L**2
     hd = hubbard_dict(L, t, u)
     basis = spinful_fermion_basis_1d(V, Nf=(N//2, N//2))
@@ -45,67 +46,70 @@ def hubbard_akw(L, N, t, u, kx, ky, order, lanczos_steps=None):
     print('Hamiltonians formed!')
     print('Finding lowest-energy eigenpair')
     e0, v0 = h.eigsh(k=1, which='SA')
+    print('Finding highest-energy eigenvalue')
     ef, _ = h.eigsh(k=1, which='LA')
-    steps = 10*order
+    steps = 10*np.max(orders)
     e0 = e0[0]
     ef = ef[0]
+    print('Putting ground state in full basis')
     v0 = basis.get_vec(v0[:, 0], sparse=False)
-
+    print('Creating creation operator')
     c_lst = []
     for x in range(L):
         for y in range(L):
             c_lst += [[np.exp(1j*(kx*x + ky*y)), (x+1)*(y+1) -1]]
 
-    cp = quantum_operator({'static': [['+|', c_lst]]}, basis=basisf,
-                          check_herm=False)
-    cm = quantum_operator({'static': [['-|', c_lst]]}, basis=basisf,
-                         check_herm=False)
-    cp_lo = cp.aslinearoperator()
-    cm_lo = cm.aslinearoperator()
+    cp_lo = quantum_operator({'static': [['+|', c_lst]]}, basis=basisf,
+                                   check_herm=False).aslinearoperator()
+    print('Creating annihilation operator')
+    cm_lo = quantum_operator({'static': [['-|', c_lst]]}, basis=basisf,
+                             check_herm=False).aslinearoperator()
 
     print('')
     print('Performing Lanczos for c^+')
-    coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp,
-                                         lanczos_steps, k=order)
+    if N//2 < V-1:
+        coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp,
+                                            lanczos_steps, k=order)
+    else:
+        print('Actually not, since c^- gives full band')
+        coeffs_minus, e_minus = np.zeros(order), np.zeros(order)
     print('')
     print('Performing Lanczos for c^-')
-    # coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism,
-    #                                        lanczos_steps)
-    coeffs_minus, e_minus = np.zeros(order), np.zeros(order)
-    aks1 = np.zeros(steps)
-    aks2 = np.zeros(steps)
+    if N//2 > 1:
+        coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism,
+                                               lanczos_steps, k=order)
+    else:
+        print('Actually not, since c^- gives vacuum')
+        coeffs_minus, e_minus = np.zeros(order), np.zeros(order)
+    aks = np.zeros((steps, len(orders)))
     e_mag = np.max(np.abs((e0, ef)))
     omegas = np.linspace(-10*e_mag, 10*e_mag, steps)
     epsilon = np.mean(np.diff(omegas))
     for i, o in enumerate(omegas):
-        aks1[i], aks2[i] = akboth(o, coeffs_plus[:order], coeffs_minus[:order],
-                                  e0, e_plus[:order], e_minus[:order], epsilon=epsilon)
-    return aks1, aks2, omegas
+        for j, ord in enumerate(orders):
+            aks[i, j], _ = akboth(o, coeffs_plus[:ord], coeffs_minus[:ord],
+                                  e0, e_plus[:ord], e_minus[:ord], epsilon=epsilon)
+    return aks, omegas
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     from scipy.special import binom
-    L = 4
+    L = 3
     t = 1
     u = 10
     N = 2
     kx = np.pi
     ky = np.pi
-    dim_h = binom(L**2, N//2)*binom(L**2, N//2)
-    orders = np.arange(5, dim_h//2, 4, dtype=int)
-    for order in orders:
-        print('')
-        try:
-            print('Running with {} eigenvalues'.format(order))
-            a1, a2, o = hubbard_akw(L, N, t, u, kx, ky, order)
-            print('Integrals at {}th order:'.format(order))
-            print(np.trapz(a1, o))
-            print(np.trapz(a2, o))
-            plt.plot(o, a1, label=order)
-        except Exception as e:
-            print('Failed at {}th order'.format(order))
-            print(e)
-            raise
+    dim_h = binom(L**2, N)*binom(L**2, N)
+    print(dim_h)
+    orders = np.arange(5, 25, 4, dtype=int)
+    aks, omegas = hubbard_akw(L, N, t, u, kx, ky, orders)
+    for i, order in enumerate(orders):
+        a = aks[:, i]
+        print('Integral at {}th order:'.format(order))
+        print(np.trapz(a, omegas))
+        plt.plot(omegas, a, label='{}th order'.format(order))
+
     plt.legend()
     plt.savefig('hubbard_spectral_fun_{}_{}_{}.png'.format(L, N, int(u/t)))
