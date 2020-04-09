@@ -1,5 +1,5 @@
 from quspin.basis import spinful_fermion_basis_1d
-from quspin.operators import quantum_operator
+from quspin.operators import quantum_operator, quantum_LinearOperator
 # from quspin.tools.misc import matvec
 from exact_qs_so5 import hamiltonian_dict, form_basis, find_min_ev, ham_op, find_nk
 import numpy as np
@@ -49,15 +49,11 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf):
     kl = [[1.0, k]]
     cl = [['+|', kl]]
     dl = [['-|', kl]]
-    cd = {'static': cl}
-    dd = {'static': dl}
-    cp = quantum_operator(cd, basis=bf, check_symm=False,
-                          check_herm=False)
-    cm = quantum_operator(dd, basis=bf, check_symm=False,
-                          check_herm=False)
 
-    cp_lo = cp.aslinearoperator()
-    cm_lo = cm.aslinearoperator()
+    cp = quantum_LinearOperator(cl, basis=bf, check_symm=False,
+                                check_herm=False)
+    cm = quantum_LinearOperator(cl, basis=bf, check_symm=False,
+                                check_herm=False)
     cpv = cp_lo.dot(v0)
     cmv = cm_lo.dot(v0)
     lc = len(vp[0, :])
@@ -198,7 +194,7 @@ def lanczos(v0, H, order, test=True, k=None):
         last_v = v
         if i + 1 < order:
             betas[i+1] = np.linalg.norm(w)
-            if i > 1 and betas[i+1] < 10**-6:
+            if i > 0 and betas[i+1] < 10**-6:
                 print('{}th step: beta too small'.format(i))
                 print(beta)
                 stop = True
@@ -233,19 +229,17 @@ def lanczos(v0, H, order, test=True, k=None):
 
 
 def lanczos_coeffs(v0, h, op, full_basis, target_basis, order, k=None):
-    # Get lanczos vectors, matrix
-    # H should be in the target basis
-    # op is c dagger or c or whatever
-    # Follow formula
-    # $$$$Profit????
     op_v0 = op.matvec(v0)
     print('Initial state created. Reducing to smaller basis')
     v = reduce_state(op_v0, full_basis, target_basis)
     print('Performing {}th order Lanczos algorithm'.format(k))
     alphas, betas, vec = lanczos(v, h, order, test=False, k=k)
-
     es, vs = eigh_tridiagonal(alphas, betas)
     coeffs = np.abs(vs[0, :])**2 # first entries squared
+    print('Lanczos coefficients')
+    print(coeffs)
+    print('Eigenvalues')
+    print(es)
     return coeffs, es
 
 
@@ -277,13 +271,11 @@ def lanczos_akw(L, N, G, order, k=None):
     dl = [['-|', kl]]
     cd = {'static': cl}
     dd = {'static': dl}
-    cp = quantum_operator(cd, basis=basisf, check_symm=False,
+    cp_lo = quantum_LinearOperator(cd['static'], basis=basisf, check_symm=False,
                           check_herm=False)
-    cm = quantum_operator(dd, basis=basisf, check_symm=False,
+    cm_lo = quantum_LinearOperator(dd['static'], basis=basisf, check_symm=False,
                           check_herm=False)
 
-    cp_lo = cp.aslinearoperator()
-    cm_lo = cm.aslinearoperator()
     print('')
     print('Performing Lanczos for c^+')
     coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp, order)
