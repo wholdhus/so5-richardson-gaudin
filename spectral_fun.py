@@ -11,10 +11,12 @@ from scipy.special import binom
 
 def reduce_state(v, full_basis, target_basis, test=False):
     # v *= 1./np.linalg.norm(v)
+    fdim = len(v)
     v_out = np.zeros(len(target_basis.states), dtype=np.complex128)
     for i, s in enumerate(target_basis.states):
-        full_ind = np.where(full_basis.states == s)[0][0]
-        v_out[i] = v[full_ind]
+        # full_ind = np.where(full_basis.states == s)[0][0]
+        v_out[i] = v[fdim - s - 1]
+        # v_out[i] = v[full_ind]
     if test:
         vf = target_basis.get_vec(v_out, sparse=False)
         print('<vin|vout>')
