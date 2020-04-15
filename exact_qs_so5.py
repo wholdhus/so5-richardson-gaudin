@@ -52,7 +52,7 @@ def casimir_dict(L, k1):
     return {'static': static}
 
 
-def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
+def hamiltonian_dict(L, G, k, no_kin=False, trig=False, g_spin=1, g_dens=1):
     # k should include positive and negative values
     all_k = []
     ppairing = [] # spin 1 pairing
@@ -88,22 +88,24 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
                          [-0.5*Xkk, p_k1, m_k2, m_k1, p_k2],
                          [-0.5*Xkk, m_k1, p_k2, p_k1, m_k2]
                         ]
+            s_c = 0.5*Xskk*g_spin
             spm += [
-                    [0.5*Xskk, p_k1, p_k2, p_k1, p_k2],
-                    [0.5*Xskk, p_k1, m_k2, p_k1, m_k2],
-                    [0.5*Xskk, m_k1, p_k2, m_k1, p_k2],
-                    [0.5*Xskk, m_k1, m_k2, m_k1, m_k2]
+                    [s_c, p_k1, p_k2, p_k1, p_k2],
+                    [s_c, p_k1, m_k2, p_k1, m_k2],
+                    [s_c, m_k1, p_k2, m_k1, p_k2],
+                    [s_c, m_k1, m_k2, m_k1, m_k2]
                     ]
-            samesame += [[0.5*Zkk, p_k1, p_k2],
-                         [0.5*Zkk, p_k1, m_k2],
-                         [0.5*Zkk, m_k1, p_k2],
-                         [0.5*Zkk, m_k1, m_k2]
+            d_c = 0.5*Zkk*g_dens
+            samesame += [[0.5*d_c, p_k1, p_k2],
+                         [0.5*d_c, p_k1, m_k2],
+                         [0.5*d_c, m_k1, p_k2],
+                         [0.5*d_c, m_k1, m_k2]
                         ]
             dens += [
-                     [-0.5*Zkk, p_k1],
-                     [-0.5*Zkk, m_k1],
-                     [-0.5*Zkk, p_k2],
-                     [-0.5*Zkk, m_k2]
+                     [-d_c, p_k1],
+                     [-d_c, m_k1],
+                     [-d_c, p_k2],
+                     [-d_c, m_k2]
                     ]
     if no_kin:
         static = [
@@ -128,7 +130,7 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
     return op_dict
 
 
-def iom_dict(L, G, k, k1=0, mult=1, kin=1):
+def iom_dict(L, G, k, k1=0, mult=1, kin=1, g_spin=1, g_dens=1):
 
     ppairing = [] # spin 1 pairing
     zpairing = [] # spin 0 pairing
@@ -154,22 +156,25 @@ def iom_dict(L, G, k, k1=0, mult=1, kin=1):
                          [-0.5*Zkk, p_k1, m_k2, m_k1, p_k2],
                          [-0.5*Zkk, m_k1, p_k2, p_k1, m_k2]
                         ]
-            samesame += [[0.5*Zkk, p_k1, p_k2],
-                         [0.5*Zkk, p_k1, m_k2],
-                         [0.5*Zkk, m_k1, p_k2],
-                         [0.5*Zkk, m_k1, m_k2]
+            d = 0.5*Zkk*g_dens
+            samesame += [[d, p_k1, p_k2],
+                         [d, p_k1, m_k2],
+                         [d, m_k1, p_k2],
+                         [d, m_k1, m_k2]
                         ]
+            s = 0.5*Zkk*g_spin
             spm += [
-                    [0.5*Zkk, p_k1, p_k2, p_k1, p_k2],
-                    [0.5*Zkk, p_k1, m_k2, p_k1, m_k2],
-                    [0.5*Zkk, m_k1, p_k2, m_k1, p_k2],
-                    [0.5*Zkk, m_k1, m_k2, m_k1, m_k2]
+                    [s, p_k1, p_k2, p_k1, p_k2],
+                    [s, p_k1, m_k2, p_k1, m_k2],
+                    [s, m_k1, p_k2, m_k1, p_k2],
+                    [s, m_k1, m_k2, m_k1, m_k2]
                     ]
+            d = -0.5*Zkk*g_dens
             dens += [
-                     [-0.5*Zkk, p_k1],
-                     [-0.5*Zkk, m_k1],
-                     [-0.5*Zkk, p_k2],
-                     [-0.5*Zkk, m_k2]
+                     [d, p_k1],
+                     [d, m_k1],
+                     [d, p_k2],
+                     [d, m_k2]
                     ]
     static = [['n|', all_k], ['|n', all_k],
               ['++--|', ppairing], ['--++|', ppairing],
@@ -295,7 +300,7 @@ def make_plots():
     print(all_k)
 
 
-def ham_op(L, G, ks, basis, rescale_g=False):
+def ham_op(L, G, ks, basis, rescale_g=False, dtype=np.float64):
     factor = 1
     if rescale_g:
         g = G/(1+G*np.sum(ks))
@@ -306,9 +311,14 @@ def ham_op(L, G, ks, basis, rescale_g=False):
     for i in range(L):
         id = iom_dict(L, g, ks, k1=i, mult=ks[i]*factor, kin=1)
         if i == 0:
-            h = quantum_operator(id, basis=basis)
+            h = quantum_operator(id, basis=basis, dtype=dtype)
         else:
-            h += quantum_operator(id, basis=basis)
+            h += quantum_operator(id, basis=basis, dtype=dtype)
+    return h
+
+def ham_op_2(L, G, ks, basis, rescale_g=True):
+    hd = hamiltonian_dict(L, G, ks, no_kin=False)
+    h = quantum_operator(hd, basis=basis)
     return h
 
 
