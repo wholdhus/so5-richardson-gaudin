@@ -11,7 +11,7 @@ from scipy.special import binom
 
 def reduce_state(v, full_basis, target_basis, test=False):
     # v *= 1./np.linalg.norm(v)
-    v_out = np.zeros(len(target_basis.states), dtype=np.float64)
+    v_out = np.zeros(len(target_basis.states), dtype=np.complex128)
     for i, s in enumerate(target_basis.states):
         full_ind = np.where(full_basis.states == s)[0][0]
         v_out[i] = v[full_ind]
@@ -61,6 +61,8 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
                                    check_herm=False)
     else:
         cp_lo, cm_lo = operators
+        print(cp_lo)
+        print(cm_lo)
     cpv0 = cp_lo.dot(v0)
     cmv0 = cm_lo.dot(v0)
     cpv = reduce_state(cpv0, bf, bp, test=True)
@@ -208,7 +210,7 @@ def lanczos(v0, H, order, k=None, re_orth=True):
         last_v = v
         if i + 1 < order:
             betas[i+1] = np.linalg.norm(w)
-            if betas[i+1] < 10**-12:
+            if betas[i+1] < 10**-6 and i > 2:
                 print('{}th beta too small'.format(i+1))
                 print(beta)
                 stop = True
@@ -236,7 +238,6 @@ def lanczos(v0, H, order, k=None, re_orth=True):
 def lanczos_coeffs(v0, h, op, full_basis, target_basis, order,
                    k=None, max_digits=None):
     op_v0 = op.dot(v0)
-    print(np.linalg.norm(op_v0))
     if np.linalg.norm(op_v0) < 10**-12:
         print('Woops, null vector!')
         return np.zeros(order), np.zeros(order)
@@ -348,19 +349,30 @@ if __name__ == '__main__':
     G = float(input('G: '))
     kf = int(input('Which k?: '))
 
-    orders = [16, 64, 512]
+    orders = [16, 64, 128]
     ks = np.array([(2*i+1)*np.pi/L for i in range(L)])
-    steps = 100
+    steps = 1000
     # check_nonint_spectral_fun(L, N, ks, steps=1000)
+    dimH = binom(4*L, N//2)**2
+
 
     plt.figure(figsize=(12,8))
-    print('Full diagonalization:')
-    afull, _, os, ns = find_spectral_fun(L, N, G, ks, steps, k=kf)
-    plt.plot(os, afull, label='Full diagonalization')
-    print('')
-    print('Integral')
-    print(np.trapz(afull, os))
-
+    print('Hilbert space dimension:')
+    print(dimH)
+    if dimH < 4000:
+        print('Full diagonalization:')
+        afull, _, os, ns = find_spectral_fun(L, N, G, ks, steps, k=kf)
+        plt.plot(os, afull, label='Full diagonalization', color = 'c')
+        print('')
+        print('Integral')
+        print(np.trapz(afull, os))
+    else:
+        print('Too big for full diagonalization, :(')
+        afull, _, os, ns = find_spectral_fun(L, N, G, ks, steps, k=kf, n_states=100)
+        plt.plot(os, afull, label='Naiive sparse, 100 states', color = 'm')
+        print('')
+        print('Integral')
+        print(np.trapz(afull, os))
     markers = ['+', 'x', '1', '2']
     for i, order in enumerate(orders):
         print('Running {}th order'.format(order))
@@ -371,26 +383,17 @@ if __name__ == '__main__':
         print('_______+++++++++_________+++++++++_________++++++++++')
         print('')
 
-    # for order in orders:
-    #     print('Running {}th order fully'.format(order))
-    #     a1, a2, o = lanczos_akw(L, N, G, order, kf=kf, steps=steps, use_sparse=False)
-    #     plt.plot(o, a1, label='Lanczos order: {}, nonsparse'.format(order))
-    #     print(np.trapz(a1, o))
-    #     print('')
-    #     print('_______+++++++++_________+++++++++_________++++++++++')
-    #     print('')
-
-    # for k in ks:
-    #     plt.axvline(k, ls = ':')
+    # e_ef = (1 + 7*G/4*ks*L)*ks
+    e_ef = (1 + 7*G*ks*L/8)*ks
+    plt.axvline(e_ef[kf-L], color='r')
+    try:
+        plt.axvline(e_ef[kf-L+1], color='g')
+        plt.axvline(e_ef[kf-L-1], color='blue')
+    except:
+        pass
     plt.xlabel('omega')
     plt.ylabel('A(k, omega)')
-    if kf <= L + N//4:
-        fs = 'below'
-    else:
-        fs = 'above'
-    plt.title('L = {}, N = {}, G = {}, {} fermi surface'.format(L, N, G, fs))
+    plt.title('L = {}, N = {}, G = {}, {}th k'.format(L, N, G, kf))
     plt.legend()
-    # plt.xlim(min(os), max(os))
-    # plt.xlim(-48, -46)
-    # plt.ylim(-0.01, 0.5)
+
     plt.show()
