@@ -2,15 +2,14 @@ from spectral_fun import spinful_fermion_basis_1d, lanczos, lanczos_coeffs
 from spectral_fun import akboth, quantum_operator, quantum_LinearOperator
 from spectral_fun import matrix_elts
 import numpy as np
-
-"""
-4x4 lattice:
-0  1  2  3
-4  5  6  7
-8  9  10 11
-12 13 14 15
-"""
-lattice = np.arange(16).reshape((4,4))
+import json
+try:
+    with open('context.json') as f:
+        context = json.load(f)
+    RESULT_FP = context['results_filepath']
+except Exception as e:
+    print('REQUIRED! context.json file with results_filepath entry')
+    raise
 
 def hubbard_dict_1d(L, t, u):
     hop_lst = [[-t, i, (i+1)%L] for i in range(L)]
@@ -170,5 +169,5 @@ if __name__ == '__main__':
             print('Failed at {}th order'.format(order))
             print(e)
     plt.legend()
-    # plt.savefig('hubbard_spectral_fun_{}_{}_{}.png'.format(L, N, int(u/t)))
-    plt.show()
+    plt.savefig(RESULT_FP + 'hubbard_spectral_fun_{}_{}_{}.png'.format(L, N, int(u/t)))
+    # plt.show()
