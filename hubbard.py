@@ -24,8 +24,6 @@ def hubbard_dict_1d(L, t, u):
     return hub_dict
 
 def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None):
-    if order is None:
-        order = 100
     hd = hubbard_dict_1d(L, t, u)
     basis = spinful_fermion_basis_1d(L, Nf=(N//2, N//2))
     basisp = spinful_fermion_basis_1d(L, Nf=(N//2+1, N//2))
@@ -67,14 +65,21 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None):
         print('Creating annihilation operator')
         cm_lo = quantum_LinearOperator([['-|', cm_lst]], basis=basisf,
                                         check_herm=False)
-    if lanczos_steps is None:
+    if lanczos_steps is None and order is None:
         e_plus, vp = hp.eigh()
         e_minus, vm = hm.eigh()
 
-        # lanczos_steps = int(3*order)
+        coeffs_plus, coeffs_minus = matrix_elts(k, v0, vp, vm, basisp, basism, basisf,
+                                                operators=(cp_lo, cm_lo))
+    elif lanczos_steps is None:
+        e_plus, vp = hp.eigsh(k=order, which='SA')
+        e_minus, vm = hm.eigsh(k=order, which='SA')
+        print('Eigenthings found!')
         coeffs_plus, coeffs_minus = matrix_elts(k, v0, vp, vm, basisp, basism, basisf,
                                                 operators=(cp_lo, cm_lo))
     else:
+        if order is None:
+            order = 100
         print('')
         print('Performing Lanczos for c^+')
         if N//2 < L-1:
@@ -95,22 +100,25 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None):
         else:
             print('Actually not, since c^- gives vacuum')
             coeffs_minus, e_minus = np.zeros(order), np.zeros(order)
-    steps = 100
+    steps = 1000
     aks = np.zeros(steps)
 
     relevant_es = []
     for i, c in enumerate(coeffs_plus):
-        if c > 10**-6:
+        if c > 10**-12:
             relevant_es += [e_plus[i]]
     for i, c in enumerate(coeffs_minus):
-        if c > 10**-6:
+        if c > 10**-12:
             relevant_es += [e_minus[i]]
     lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
     highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
     omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
 
-    epsilon = np.mean(np.diff(omegas))
-    # epsilon = 0.01
+    # epsilon = np.mean(np.diff(omegas))
+    epsilon = 0.1
+
+    coeffs_plus = np.zeros(order)
+
     for i, o in enumerate(omegas):
         aks[i], _ = akboth(o, coeffs_plus/2, coeffs_minus/2,
                               e0 - N*mu, e_plus - (N+1)*mu, e_minus - (N-1)*mu, epsilon=epsilon)
@@ -130,44 +138,33 @@ if __name__ == '__main__':
     print('Fermi momentum is around:')
     print(ks_pos[N//4])
 
-    k = float(input('k: '))
+    # k = float(input('k: '))
 
     # k = 0
     # dim_h = binom(L**2, N//2)**2
     dim_h = binom(L, N//2)**2
     print(dim_h)
-    if dim_h < 4000:
-        a1, o = hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None)
-        print('Integrals of exact:')
-        print(np.trapz(a1, o))
-        plt.plot(o, a1, label="exact", color='m')
-    orders = [10, 20, 40]
-    for i, order in enumerate(orders):
+    for k in ks_pos:
+        print('k = {}'.format(k))
         print('')
         try:
-            print('Running with {} eigenvalues'.format(order))
-            a1, o = hubbard_akw_1d(L, N, t, u, k, order, lanczos_steps=3*order)
-            print('Integrals at {}th order:'.format(order))
-            print(np.trapz(a1, o))
-            plt.scatter(o, a1, label="order: {}".format(order))
-        except Exception as e:
-            print('Failed at {}th order'.format(order))
-            print(e)
-            # raise
-
-    orders = [10, 20, 40]
-    u *= 1.5
-    for i, order in enumerate(orders):
-        print('')
-        try:
-            print('Running with {} eigenvalues'.format(order))
-            a1, o = hubbard_akw_1d(L, N, t, u, k, order, lanczos_steps=3*order)
-            print('Integrals at {}th order:'.format(order))
-            print(np.trapz(a1, o))
-            plt.scatter(o, a1, label="order: {}".format(order))
-        except Exception as e:
-            print('Failed at {}th order'.format(order))
-            print(e)
+            if dim_h < 4000:
+                a1, o = hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None)
+                print('Integrals of exact:')
+                print(np.trapz(a1, o))
+                plt.plot(o, a1, label=k, color='m')
+            else:
+                print('Running naiive sparse')
+                a1, o = hubbard_akw_1d(L, N, t, u, k, order=100, lanczos_steps=None)
+                print('Integrals of naiive sparse:')
+                print(np.trapz(a1, o))
+                plt.plot(o, a1, label='k = {}'.format(np.round(k, 2)))
+        except:
+            pass
     plt.legend()
-    plt.savefig(RESULT_FP + 'hubbard_spectral_fun_{}_{}_{}.png'.format(L, N, int(u/t)))
+    plt.xlabel('omega/t')
+    plt.ylabel('A(k,omega)')
+    plt.title('L = {}, N = {}, u/t = {}'.format(L, N, (u/t)))
+    plt.savefig(RESULT_FP + 'hubbard_ak_minus_L{}N{}U{}.png'.format(L, N, int(u/t)))
+    
     # plt.show()
