@@ -95,7 +95,7 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     return np.abs(celts)**2, np.abs(delts)**2
 
 
-def find_spectral_fun(L, N, G, ks, steps, k=None, n_states=-999):
+def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -129,24 +129,25 @@ def find_spectral_fun(L, N, G, ks, steps, k=None, n_states=-999):
     print(np.max(delts))
     print(np.argmax(delts))
 
-    relevant_es = []
-    for i, c in enumerate(celts):
-        if c > 10**-8:
-            relevant_es += [ep[i]]
-    for i, c in enumerate(delts):
-        if c > 10**-8:
-            relevant_es += [em[i]]
-    lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
-    highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
-    omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
+    if np.shape(steps) == ():
+        ak_plus = np.zeros(steps)
+        ak_minus = np.zeros(steps)
+
+        relevant_es = []
+        for i, c in enumerate(celts):
+            if c > 10**-8:
+                relevant_es += [ep[i]]
+        for i, c in enumerate(delts):
+            if c > 10**-8:
+                relevant_es += [em[i]]
+        lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
+        highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
+        omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
+    else:
+        omegas = steps
+        ak_plus, ak_minus = np.zeros(len(omegas)), np.zeros(len(omegas))
     epsilon = np.mean(np.diff(omegas))
-
-    ak_plus = np.zeros(steps)
-    ak_minus = np.zeros(steps)
-
-
-    epsilon = np.mean(np.diff(omegas))
-
+    # epsilon = .1
     for i, o in enumerate(omegas):
         ak_plus[i], ak_minus[i] = akboth(o, celts, delts, e0, ep, em, epsilon=epsilon)
 
@@ -271,7 +272,7 @@ def lanczos_coeffs(v0, h, op, full_basis, target_basis, order,
     return coeffs, es
 
 
-def lanczos_akw(L, N, G, order, kf=None, steps=1000):
+def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000):
 
     Nup = N//2
     Ndown = N//2
@@ -283,7 +284,6 @@ def lanczos_akw(L, N, G, order, kf=None, steps=1000):
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    ks = np.array([(2*i+1)*np.pi/L for i in range(L)])
     h = ham_op(L, G, ks, basis, rescale_g=True)
     hp = ham_op(L, G, ks, basisp, rescale_g=True)
     hm = ham_op(L, G, ks, basism, rescale_g=True)
@@ -305,11 +305,12 @@ def lanczos_akw(L, N, G, order, kf=None, steps=1000):
         dim_up = binom(4*L, Nup+1)*binom(4*L, Ndown)
         # up_order = min(dim_up//2, order)
         up_order = order
-        up_ev = up_order//3
+        up_ev = up_order//2
         cp_lo = quantum_LinearOperator(cl, basis=basisf, check_symm=False,
                                        check_herm=False)
         coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp, up_order,
                                              k=up_ev, max_digits=10)
+        coeffs_plus, e_plus = coeffs_plus[:up_ev], e_plus[:up_ev]
     else:
         print('Woops, too many fermions, raising will mess things up!')
         coeffs_plus, e_plus = np.zeros(order), np.zeros(order)
@@ -320,43 +321,45 @@ def lanczos_akw(L, N, G, order, kf=None, steps=1000):
         dim_down = binom(4*L, Nup-1)*binom(4*L, Ndown)
         # down_order = min(dim_down//2, order)
         down_order = order
-        down_ev = down_order//3
+        down_ev = down_order//2
         cm_lo = quantum_LinearOperator(dl, basis=basisf, check_symm=False,
                                        check_herm=False)
         coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism, down_order,
                                                k=down_ev, max_digits=10)
+        coeffs_minus, e_minus = coeffs_minus[:down_ev], e_minus[:down_ev]
     else:
         print('Woops, not enough fermions.')
         coeffs_minus, e_minus = np.zeros(L), np.zeros(L)
-    aks_p = np.zeros(steps)
-    aks_m = np.zeros(steps)
+    if np.shape(steps) == ():
+        aks_p = np.zeros(steps)
+        aks_m = np.zeros(steps)
 
-    relevant_es = []
-    for i, c in enumerate(coeffs_plus):
-        if c > 10**-8:
-            relevant_es += [e_plus[i]]
-    for i, c in enumerate(coeffs_minus):
-        if c > 10**-8:
-            relevant_es += [e_minus[i]]
-    lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
-    highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
-    omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
+        relevant_es = []
+        for i, c in enumerate(coeffs_plus):
+            if c > 10**-8:
+                relevant_es += [e_plus[i]]
+        for i, c in enumerate(coeffs_minus):
+            if c > 10**-8:
+                relevant_es += [e_minus[i]]
+        lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
+        highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
+        omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
+    else:
+        omegas = steps
+        aks_p, aks_m = np.zeros(len(omegas)), np.zeros(len(omegas))
     epsilon = np.mean(np.diff(omegas))
+    #epsilon = 0.1
     for i, o in enumerate(omegas):
         aks_p[i], aks_m[i] = akboth(o, coeffs_plus/2, coeffs_minus/2,
                                     e0, e_plus, e_minus, epsilon=epsilon)
     return aks_p, aks_m, omegas
 
 
-if __name__ == '__main__':
-
-
-
-    import matplotlib.pyplot as plt
+def method_comparison_plots():
     L = int(input('L: '))
     N = int(input('N: '))
     G = float(input('G: '))
-    # kf = int(input('Which k?: '))
+    kf = int(input('Which k?: '))
 
     ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
     steps = 1000
@@ -366,13 +369,53 @@ if __name__ == '__main__':
     dimH = binom(2*L, N//2)**2
 
 
-    plt.figure(figsize=(12,8))
     print('Hilbert space dimension:')
     print(dimH)
     colors = ['blue','magenta','green','orange','purple','red','cyan']
     styles = [':', '-.', '--']
     xmin = 0
     xmax = 0
+    plt.figure(figsize=(12, 8))
+    ap_100, am_100, os_100 = lanczos_akw(L, N, G, ks, order=100, kf=kf, steps=steps)
+    os = os_100 # this should capture the full range of peaks
+    ap_20, am_20, os_20 = lanczos_akw(L, N, G, ks, order=20, kf=kf, steps=os)
+
+    ap_s_20, am_s_20, os_s_20, ns = find_spectral_fun(L, N, G, ks, steps=os_full, k=kf, n_states=20)
+    ap_s_100, am_s_100, os_s_100, ns = find_spectral_fun(L, N, G, ks, steps=os, k=kf, n_states=100)
+
+    plt.scatter(os_s_20, ap_s_20 + am_s_20, label = 'Sparse, 20 states', marker='1', color='magenta', s=20)
+    plt.scatter(os_s_100, ap_s_100 + am_s_100, label = 'Sparse, 100 states', marker='2', color='green', s=20)
+    plt.scatter(os_20, ap_20 + am_20, label = 'Lanczos, 20 steps', marker='o', color='orange', s=20)
+    plt.scatter(os_100, ap_100 + am_100, label = 'Lanczos, 100 steps', marker='+', color='purple', s=20)
+    plt.legend()
+    plt.title('L = {}, N = {}, k = {}'.format(L, N, np.round(ks[kf-L], 2)))
+    plt.xlabel('omega')
+    plt.ylabel('A(k,omega)')
+    # plt.xlim(min(os_s_100), max(os_s_100))
+    # plt.xlim(-20, -10)
+    # plt.ylim(-0.01, 0.1)
+    f = input('Filename to save figure, or blank to display plot: ')
+    if f == '':
+        plt.show()
+    else:
+        plt.savefig(f)
+
+def plot_multiple_ks():
+    L = int(input('L: '))
+    N = int(input('N: '))
+    G = float(input('G: '))
+    kf = int(input('Which k?: '))
+
+    ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
+    steps = 1000
+
+    # check_nonint_spectral_fun(L, N, ks, steps=1000)
+    dimH = binom(2*L, N//2)**2
+    colors = ['blue','magenta','green','orange','purple','red','cyan']
+    styles = [':', '-.', '--']
+    xmin = 0
+    xmax = 0
+    plt.figure(figsize=(12, 8))
     if dimH < 4000:
         i = 0
         for j, k in enumerate(ks):
@@ -404,6 +447,13 @@ if __name__ == '__main__':
         print('Integral')
         print(np.trapz(a_plus + a_minus, os))
 
+    f = input('Filename to save figure, or blank to display plot')
+    if f == '':
+        plt.show()
+    else:
+        plt.savefig(f)
 
-    plt.show()
-    # # plt.savefig()
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    plot_multiple_ks()
