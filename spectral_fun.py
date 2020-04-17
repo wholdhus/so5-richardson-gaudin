@@ -32,17 +32,23 @@ def reduce_state(v, full_basis, target_basis, test=False):
 
 
 def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
-    # gps = -2j*celts*epsilon/((omega - ep)**2 + epsilon**2)
-    # gms = 2j*delts*epsilon/((omega + em)**2 + epsilon**2)
-    gps = -1j*celts*epsilon/((omega + e0 - ep)**2 + epsilon**2)
-    gms = 1j*delts*epsilon/((omega - e0 + em)**2 + epsilon**2)
 
-    gp2 = celts/(omega - ep +  e0 + 1j*epsilon)
-    gm2 = delts/(omega + em - e0 - 1j*epsilon)
-    # gp2 = celts/(omega - ep +  1j*epsilon)
-    # gm2 = delts/(omega + em - 1j*epsilon)
-    return (np.sum(gps) - np.sum(gms)).imag/(-1*np.pi), (np.sum(gm2) - np.sum(gp2)).imag/np.pi
+    gps = celts*epsilon/((e0 - ep + omega)**2 + epsilon**2)
+    gms = delts*epsilon/((e0 - em - omega)**2 + epsilon**2)
 
+    gp2 = celts/(e0 - ep + omega - 1j*epsilon)
+    gm2 = delts/(e0 - em - omega - 1j*epsilon)
+
+    d1 = np.linalg.norm(gps - gp2.imag)
+    d2 = np.linalg.norm(gms - gm2.imag)
+    if d1 > 10**-10 or d2 > 10**-10:
+        print('Woah these should be zero')
+        print('Diff in g^+')
+        print(np.linalg.norm(gps - gp2.imag))
+        print('Diff in g^-')
+        print(np.linalg.norm(gms - gm2.imag))
+    # return (np.sum(gps) - np.sum(gms)).imag/(-1*np.pi), (np.sum(gm2) - np.sum(gp2)).imag/np.pi
+    return np.sum(gp2).imag/np.pi, np.sum(gm2.imag)/np.pi
 
 def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     """
@@ -115,8 +121,6 @@ def find_spectral_fun(L, N, G, ks, steps, k=None, n_states=-999):
         ep, vp = hp.eigsh(k=n_states, which='SA')
         em, vm = hm.eigsh(k=n_states, which='SA')
 
-
-
     celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
     print('Largest matrix elements: Creation')
     print(np.max(celts))
@@ -137,26 +141,28 @@ def find_spectral_fun(L, N, G, ks, steps, k=None, n_states=-999):
     omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
     epsilon = np.mean(np.diff(omegas))
 
-    aks1 = np.zeros(steps)
-    aks2 = np.zeros(steps)
+    ak_plus = np.zeros(steps)
+    ak_minus = np.zeros(steps)
 
 
     epsilon = np.mean(np.diff(omegas))
 
     for i, o in enumerate(omegas):
-        aks1[i], aks2[i] = akboth(o, celts, delts, e0, ep, em, epsilon=epsilon)
+        ak_plus[i], ak_minus[i] = akboth(o, celts, delts, e0, ep, em, epsilon=epsilon)
 
     ns = find_nk(L, v[:,0], basis)
-    return aks1, aks2, omegas, ns
+    return ak_plus, ak_minus, omegas, ns
 
 
 def check_nonint_spectral_fun(L, N, disp, steps=1000):
     ks = np.arange(L, 2*L)
     plt.figure(figsize=(12, 8))
+    colors = ['orange', 'blue', 'pink', 'red','cyan','yellow','magenta','purple']
     # omegas = np.linspace(0, 1.5*np.max(disp), steps)
-    for k in ks:
+    for i, k in enumerate(ks):
         print('')
-        a1, a2, om, ns = find_spectral_fun(L, N, 0, disp, steps, k=k)
+        ap, am, om, ns = find_spectral_fun(L, N, 0, disp, steps, k=k)
+        a1 = ap + am
         peak_i = np.argmax(a1)
         peak_om = om[peak_i]
         print('Omega at peak value:')
@@ -165,18 +171,19 @@ def check_nonint_spectral_fun(L, N, disp, steps=1000):
         print(disp[k-L])
         print('omega - epsilon_k:')
         print(peak_om - disp[k-L])
-        print('Integrals')
+        print('Integral')
         print(np.trapz(a1, om))
-        print(np.trapz(a2, om))
-        plt.scatter(om, a2, label = '{}th level'.format(k))
+        plt.scatter(om, ap, label = '{}th level, A^+'.format(k), color=colors[i%len(colors)], marker='^')
+        plt.scatter(om, am, label = '{}th level, A^-'.format(k), color=colors[i%len(colors)], marker='v')
+        plt.axvline(disp[i], color=colors[i%len(colors)])
     plt.xlim(0, 1.5*max(disp))
     plt.legend()
     plt.xlabel('Omega')
     plt.ylabel('A(k,omega)')
-    plt.title('L = {}, N = {}'.format(L, 2*N))
+    plt.title('L = {}, N = {}'.format(L, N))
 
-    for d in disp:
-        plt.axvline(d)
+    # for d in disp:
+    #     plt.axvline(d)
 
     plt.show()
 
@@ -321,8 +328,8 @@ def lanczos_akw(L, N, G, order, kf=None, steps=1000):
     else:
         print('Woops, not enough fermions.')
         coeffs_minus, e_minus = np.zeros(L), np.zeros(L)
-    aks1 = np.zeros(steps)
-    aks2 = np.zeros(steps)
+    aks_p = np.zeros(steps)
+    aks_m = np.zeros(steps)
 
     relevant_es = []
     for i, c in enumerate(coeffs_plus):
@@ -336,9 +343,9 @@ def lanczos_akw(L, N, G, order, kf=None, steps=1000):
     omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
     epsilon = np.mean(np.diff(omegas))
     for i, o in enumerate(omegas):
-        aks1[i], aks2[i] = akboth(o, coeffs_plus/2, coeffs_minus/2,
-                                  e0, e_plus, e_minus, epsilon=epsilon)
-    return aks1, aks2, omegas
+        aks_p[i], aks_m[i] = akboth(o, coeffs_plus/2, coeffs_minus/2,
+                                    e0, e_plus, e_minus, epsilon=epsilon)
+    return aks_p, aks_m, omegas
 
 
 if __name__ == '__main__':
@@ -349,53 +356,54 @@ if __name__ == '__main__':
     L = int(input('L: '))
     N = int(input('N: '))
     G = float(input('G: '))
-    kf = int(input('Which k?: '))
+    # kf = int(input('Which k?: '))
 
-    orders = [16, 64, 128]
-    ks = np.array([(2*i+1)*np.pi/L for i in range(L)])
+    ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
     steps = 1000
+
+
     # check_nonint_spectral_fun(L, N, ks, steps=1000)
-    dimH = binom(4*L, N//2)**2
+    dimH = binom(2*L, N//2)**2
 
 
     plt.figure(figsize=(12,8))
     print('Hilbert space dimension:')
     print(dimH)
+    colors = ['blue','magenta','green','orange','purple','red','cyan']
+    styles = [':', '-.', '--']
+    xmin = 0
+    xmax = 0
     if dimH < 4000:
-        print('Full diagonalization:')
-        afull, _, os, ns = find_spectral_fun(L, N, G, ks, steps, k=kf)
-        plt.plot(os, afull, label='Full diagonalization', color = 'c')
-        print('')
-        print('Integral')
-        print(np.trapz(afull, os))
+        i = 0
+        for j, k in enumerate(ks):
+            ki = j + L
+            print('***********************************')
+            print('Full diagonalization for k = {}:'.format(k))
+            print('')
+            a_plus, a_minus, os, ns = find_spectral_fun(L, N, G, ks, steps, k=ki)
+            plt.plot(os, a_minus+a_plus, color=colors[i%len(colors)])
+            plt.scatter(os, a_minus, label='A^-, k = {}'.format(np.round(k, 2)), marker='v', color=colors[i%len(colors)])
+            plt.scatter(os, a_plus, label='A^+, k = {}'.format(np.round(k,2)), marker='^', color=colors[i%len(colors)])
+            xmin = min((min(os), xmin))
+            xmax = max((max(os), xmax))
+            print('')
+            print('Integral')
+            print(np.trapz(a_plus+a_minus, os))
+            i += 1
+
+        plt.xlabel('omega')
+        plt.ylabel('A(k, omega)')
+        plt.xlim(xmin, xmax)
+        plt.title('L = {}, N = {}, G = {}'.format(L, N, G))
+        plt.legend()
     else:
         print('Too big for full diagonalization, :(')
-        afull, _, os, ns = find_spectral_fun(L, N, G, ks, steps, k=kf, n_states=100)
-        plt.plot(os, afull, label='Naiive sparse, 100 states', color = 'm')
+        a_plus, a_minus, os, ns = find_spectral_fun(L, N, G, ks, steps, k=kf, n_states=100)
+        plt.plot(os, a_minus, label='Naiive sparse, 100 states', color = 'm')
         print('')
         print('Integral')
-        print(np.trapz(afull, os))
-    markers = ['+', 'x', '1', '2']
-    for i, order in enumerate(orders):
-        print('Running {}th order'.format(order))
-        a1, a2, o = lanczos_akw(L, N, G, order, kf=kf, steps=steps)
-        plt.scatter(o, a1, label='Lanczos order: {}'.format(order), s=20, marker=markers[i%4])
-        print(np.trapz(a1, o))
-        print('')
-        print('_______+++++++++_________+++++++++_________++++++++++')
-        print('')
+        print(np.trapz(a_plus + a_minus, os))
 
-    # e_ef = (1 + 7*G/4*ks*L)*ks
-    e_ef = (1 + 7*G*ks*L/8)*ks
-    plt.axvline(e_ef[kf-L], color='r')
-    try:
-        plt.axvline(e_ef[kf-L+1], color='g')
-        plt.axvline(e_ef[kf-L-1], color='blue')
-    except:
-        pass
-    plt.xlabel('omega')
-    plt.ylabel('A(k, omega)')
-    plt.title('L = {}, N = {}, G = {}, {}th k'.format(L, N, G, kf))
-    plt.legend()
 
     plt.show()
+    # # plt.savefig()
