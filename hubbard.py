@@ -23,7 +23,7 @@ def hubbard_dict_1d(L, t, u):
     hub_dict = {'static': hub_lst}
     return hub_dict
 
-def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None):
+def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000):
     hd = hubbard_dict_1d(L, t, u)
     basis = spinful_fermion_basis_1d(L, Nf=(N//2, N//2))
     basisp = spinful_fermion_basis_1d(L, Nf=(N//2+1, N//2))
@@ -45,6 +45,7 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None):
     ep, _ = hp.eigsh(k=1, which='SA')
     em, _ = hm.eigsh(k=1, which='SA')
     mu = (ep[0]-em[0])/2
+    # mu = 0
     print('')
     print('Chemical potential:')
     print(mu)
@@ -57,15 +58,18 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None):
     for x in range(L):
         cp_lst += [[np.exp(1j*k*(x+1))/np.sqrt(L), x]]
         cm_lst += [[np.exp(-1j*k*(x+1))/np.sqrt(L), x]]
-    if N//2 < L-1:
-        print('Creating creation operator')
-        cp_lo = quantum_LinearOperator([['+|', cp_lst]], basis=basisf,
-                                check_herm=False)
-    if N//2 > 1:
-        print('Creating annihilation operator')
-        cm_lo = quantum_LinearOperator([['-|', cm_lst]], basis=basisf,
+        # cp_lst += [[np.exp(1j*k*(x+1)), x]]
+        # cm_lst += [[np.exp(-1j*k*(x+1)), x]]
+
+    print('Creating creation operator')
+    cp_lo = quantum_LinearOperator([['+|', cp_lst]], basis=basisf,
+                                    check_herm=False)
+    print('Creating annihilation operator')
+    cm_lo = quantum_LinearOperator([['-|', cm_lst]], basis=basisf,
                                         check_herm=False)
     if lanczos_steps is None and order is None:
+        print('&&&##&#&#&#&#&#')
+        print('full diagonalization!!')
         e_plus, vp = hp.eigh()
         e_minus, vm = hm.eigh()
 
@@ -100,28 +104,26 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None):
         else:
             print('Actually not, since c^- gives vacuum')
             coeffs_minus, e_minus = np.zeros(order), np.zeros(order)
-    steps = 1000
+    # steps = 1000
     aks = np.zeros(steps)
 
     relevant_es = []
-    for i, c in enumerate(coeffs_plus):
-        if c > 10**-12:
-            relevant_es += [e_plus[i]]
-    for i, c in enumerate(coeffs_minus):
-        if c > 10**-12:
-            relevant_es += [e_minus[i]]
-    lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
-    highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
-    omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
+    all_es = np.concatenate((e_plus, e_minus))
 
-    # epsilon = np.mean(np.diff(omegas))
-    epsilon = 0.1
+    lowmega = min((e0 - max(all_es),
+                   min(all_es) - e0))
+    highmega = max((max(all_es) - e0,
+                    e0 - min(all_es)))
 
-    coeffs_plus = np.zeros(order)
+    omegas = np.linspace(lowmega, highmega, steps)
+    # omegas = np.linspace(-100, 100, steps)
+    epsilon = np.mean(np.diff(omegas))
+    # epsilon = 0.1
 
     for i, o in enumerate(omegas):
-        aks[i], _ = akboth(o, coeffs_plus/2, coeffs_minus/2,
-                              e0 - N*mu, e_plus - (N+1)*mu, e_minus - (N-1)*mu, epsilon=epsilon)
+        ap, am = akboth(o, coeffs_plus, coeffs_minus,
+                        e0 - N*mu, e_plus - (N+1)*mu, e_minus - (N-1)*mu, epsilon=epsilon)
+        aks[i] = ap + am
     return aks, omegas
 
 
@@ -133,10 +135,10 @@ if __name__ == '__main__':
     t = float(input('t: '))
     u = float(input('u: '))
 
-    ks = np.arange(L//2-1, L//2+1)*2*np.pi/L
+    ks = np.arange(-L//2+1, L//2+1)*2*np.pi/L
     ks_pos = np.arange(0, L//2+1)*2*np.pi/L
     print('Fermi momentum is around:')
-    print(ks_pos[N//4])
+    # print(ks_pos[N//4])
 
     # k = float(input('k: '))
 
@@ -144,6 +146,7 @@ if __name__ == '__main__':
     # dim_h = binom(L**2, N//2)**2
     dim_h = binom(L, N//2)**2
     print(dim_h)
+    ks_pos = np.linspace(0, np.pi, 10)
     for k in ks_pos:
         print('k = {}'.format(k))
         print('')
@@ -152,7 +155,7 @@ if __name__ == '__main__':
                 a1, o = hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None)
                 print('Integrals of exact:')
                 print(np.trapz(a1, o))
-                plt.plot(o, a1, label=k, color='m')
+                plt.plot(o, a1, label=k)
             else:
                 print('Running naiive sparse')
                 a1, o = hubbard_akw_1d(L, N, t, u, k, order=100, lanczos_steps=None)
@@ -165,6 +168,7 @@ if __name__ == '__main__':
     plt.xlabel('omega/t')
     plt.ylabel('A(k,omega)')
     plt.title('L = {}, N = {}, u/t = {}'.format(L, N, (u/t)))
-    plt.savefig(RESULT_FP + 'hubbard_ak_minus_L{}N{}U{}.png'.format(L, N, int(u/t)))
-    
+    # plt.savefig(RESULT_FP + 'hubbard_ak_minus_L{}N{}U{}.png'.format(L, N, int(u/t)))
+    plt.savefig('hubbard_ak_minus_L{}N{}U{}.png'.format(L, N, int(u/t)))
+
     # plt.show()

@@ -133,16 +133,21 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
         ak_plus = np.zeros(steps)
         ak_minus = np.zeros(steps)
 
-        relevant_es = []
-        for i, c in enumerate(celts):
-            if c > 10**-8:
-                relevant_es += [ep[i]]
-        for i, c in enumerate(delts):
-            if c > 10**-8:
-                relevant_es += [em[i]]
-        lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
-        highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
-        omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
+        # relevant_es = []
+        # for i, c in enumerate(celts):
+        #     if c > 10**-10:
+        #         relevant_es += [ep[i]]
+        # for i, c in enumerate(delts):
+        #     if c > 10**-10:
+        #         relevant_es += [em[i]]
+        # lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
+        # highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
+        all_es = np.concatenate((ep, em))
+        lowmega = min((e0 - max(all_es),
+                   min(all_es) - e0))
+        highmega = max((max(all_es) - e0,
+                    e0 - min(all_es)))
+        omegas = np.linspace(1.5*lowmega, 1.5*highmega, steps)
     else:
         omegas = steps
         ak_plus, ak_minus = np.zeros(len(omegas)), np.zeros(len(omegas))
@@ -380,7 +385,7 @@ def method_comparison_plots():
     os = os_100 # this should capture the full range of peaks
     ap_20, am_20, os_20 = lanczos_akw(L, N, G, ks, order=20, kf=kf, steps=os)
 
-    ap_s_20, am_s_20, os_s_20, ns = find_spectral_fun(L, N, G, ks, steps=os_full, k=kf, n_states=20)
+    ap_s_20, am_s_20, os_s_20, ns = find_spectral_fun(L, N, G, ks, steps=os, k=kf, n_states=20)
     ap_s_100, am_s_100, os_s_100, ns = find_spectral_fun(L, N, G, ks, steps=os, k=kf, n_states=100)
 
     plt.scatter(os_s_20, ap_s_20 + am_s_20, label = 'Sparse, 20 states', marker='1', color='magenta', s=20)
@@ -456,4 +461,5 @@ def plot_multiple_ks():
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    plot_multiple_ks()
+    # plot_multiple_ks()
+    method_comparison_plots()
