@@ -50,6 +50,7 @@ def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
     # return (np.sum(gps) - np.sum(gms)).imag/(-1*np.pi), (np.sum(gm2) - np.sum(gp2)).imag/np.pi
     return np.sum(gp2).imag/np.pi, np.sum(gm2.imag)/np.pi
 
+
 def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     """
     Gets matrix elements between creation and annihilation
@@ -95,7 +96,8 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     return np.abs(celts)**2, np.abs(delts)**2
 
 
-def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
+def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
+                      eta=None):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -104,9 +106,9 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op(L, G, ks, basis, rescale_g=True)
-    hp = ham_op(L, G, ks, basisp, rescale_g=True)
-    hm = ham_op(L, G, ks, basism, rescale_g=True)
+    h = ham_op_2(L, G, ks, basis, rescale_g=True)
+    hp = ham_op_2(L, G, ks, basisp, rescale_g=True)
+    hm = ham_op_2(L, G, ks, basism, rescale_g=True)
     if n_states == -999:
         e, v = h.eigsh(k=1, which='SA')
         e0 = e[0]
@@ -120,6 +122,11 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
         v0 = basis.get_vec(v[:,0], sparse=False)
         ep, vp = hp.eigsh(k=n_states, which='SA')
         em, vm = hm.eigsh(k=n_states, which='SA')
+    mu = (ep[0] - em[0])/2
+    print('Fermi energy: {}'.format(mu))
+    e0 -= N*mu
+    ep -= (N+1)*mu
+    em -= (N-1)*mu
 
     celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
     print('Largest matrix elements: Creation')
@@ -133,15 +140,6 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
         ak_plus = np.zeros(steps)
         ak_minus = np.zeros(steps)
 
-        # relevant_es = []
-        # for i, c in enumerate(celts):
-        #     if c > 10**-10:
-        #         relevant_es += [ep[i]]
-        # for i, c in enumerate(delts):
-        #     if c > 10**-10:
-        #         relevant_es += [em[i]]
-        # lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
-        # highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
         all_es = np.concatenate((ep, em))
         lowmega = min((e0 - max(all_es),
                    min(all_es) - e0))
@@ -151,10 +149,10 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
     else:
         omegas = steps
         ak_plus, ak_minus = np.zeros(len(omegas)), np.zeros(len(omegas))
-    epsilon = np.mean(np.diff(omegas))
-    # epsilon = .1
+    if eta is None:
+        eta = np.mean(np.diff(omegas))
     for i, o in enumerate(omegas):
-        ak_plus[i], ak_minus[i] = akboth(o, celts, delts, e0, ep, em, epsilon=epsilon)
+        ak_plus[i], ak_minus[i] = akboth(o, celts, delts, e0, ep, em, epsilon=eta)
 
     ns = find_nk(L, v[:,0], basis)
     return ak_plus, ak_minus, omegas, ns
@@ -421,7 +419,7 @@ def plot_multiple_ks():
     xmin = 0
     xmax = 0
     plt.figure(figsize=(12, 8))
-    if dimH < 4000:
+    if dimH < 8000:
         i = 0
         for j, k in enumerate(ks):
             ki = j + L
@@ -461,5 +459,5 @@ def plot_multiple_ks():
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    # plot_multiple_ks()
-    method_comparison_plots()
+    plot_multiple_ks()
+    # method_comparison_plots()

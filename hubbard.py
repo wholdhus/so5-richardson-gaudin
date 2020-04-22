@@ -1,6 +1,6 @@
 from spectral_fun import spinful_fermion_basis_1d, lanczos, lanczos_coeffs
 from spectral_fun import akboth, quantum_operator, quantum_LinearOperator
-from spectral_fun import matrix_elts
+from spectral_fun import matrix_elts, find_nk
 import numpy as np
 import json
 try:
@@ -23,7 +23,8 @@ def hubbard_dict_1d(L, t, u):
     hub_dict = {'static': hub_lst}
     return hub_dict
 
-def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000):
+def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000,
+                   eta=None):
     hd = hubbard_dict_1d(L, t, u)
     basis = spinful_fermion_basis_1d(L, Nf=(N//2, N//2))
     basisp = spinful_fermion_basis_1d(L, Nf=(N//2+1, N//2))
@@ -52,7 +53,7 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000):
     print('')
 
     print('Putting ground state in full basis')
-    v0 = basis.get_vec(v0[:, 0], sparse=False)
+    v0_full = basis.get_vec(v0[:, 0], sparse=False)
     cp_lst = []
     cm_lst = []
     for x in range(L):
@@ -73,13 +74,13 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000):
         e_plus, vp = hp.eigh()
         e_minus, vm = hm.eigh()
 
-        coeffs_plus, coeffs_minus = matrix_elts(k, v0, vp, vm, basisp, basism, basisf,
+        coeffs_plus, coeffs_minus = matrix_elts(k, v0_full, vp, vm, basisp, basism, basisf,
                                                 operators=(cp_lo, cm_lo))
     elif lanczos_steps is None:
         e_plus, vp = hp.eigsh(k=order, which='SA')
         e_minus, vm = hm.eigsh(k=order, which='SA')
         print('Eigenthings found!')
-        coeffs_plus, coeffs_minus = matrix_elts(k, v0, vp, vm, basisp, basism, basisf,
+        coeffs_plus, coeffs_minus = matrix_elts(k, v0_full, vp, vm, basisp, basism, basisf,
                                                 operators=(cp_lo, cm_lo))
     else:
         if order is None:
@@ -88,7 +89,7 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000):
         print('Performing Lanczos for c^+')
         if N//2 < L-1:
 
-            coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp,
+            coeffs_plus, e_plus = lanczos_coeffs(v0_full, hp, cp_lo, basisf, basisp,
                                             lanczos_steps, k=order)
             coeffs_plus = coeffs_plus[:order]
             e_plus = e_plus[:order]
@@ -98,14 +99,13 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000):
         print('')
         print('Performing Lanczos for c^-')
         if N//2 > 1:
-            coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism,
+            coeffs_minus, e_minus = lanczos_coeffs(v0_full, hm, cm_lo, basisf, basism,
                                                lanczos_steps, k=order)
             coeffs_minus, e_minus = coeffs_minus[:order], e_minus[:order]
         else:
             print('Actually not, since c^- gives vacuum')
             coeffs_minus, e_minus = np.zeros(order), np.zeros(order)
     # steps = 1000
-    aks = np.zeros(steps)
 
     relevant_es = []
     all_es = np.concatenate((e_plus, e_minus))
@@ -117,58 +117,15 @@ def hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None, steps=1000):
 
     omegas = np.linspace(lowmega, highmega, steps)
     # omegas = np.linspace(-100, 100, steps)
-    epsilon = np.mean(np.diff(omegas))
+    if eta is None:
+        eta = np.mean(np.diff(omegas))
     # epsilon = 0.1
-
+    ak_plus = np.zeros(steps)
+    ak_minus = np.zeros(steps)
     for i, o in enumerate(omegas):
         ap, am = akboth(o, coeffs_plus, coeffs_minus,
-                        e0 - N*mu, e_plus - (N+1)*mu, e_minus - (N-1)*mu, epsilon=epsilon)
-        aks[i] = ap + am
-    return aks, omegas
-
-
-if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    from scipy.special import binom
-    L = int(input('L: '))
-    N = int(input('N: '))
-    t = float(input('t: '))
-    u = float(input('u: '))
-
-    ks = np.arange(-L//2+1, L//2+1)*2*np.pi/L
-    ks_pos = np.arange(0, L//2+1)*2*np.pi/L
-    print('Fermi momentum is around:')
-    # print(ks_pos[N//4])
-
-    # k = float(input('k: '))
-
-    # k = 0
-    # dim_h = binom(L**2, N//2)**2
-    dim_h = binom(L, N//2)**2
-    print(dim_h)
-    ks_pos = np.linspace(0, np.pi, 10)
-    for k in ks_pos:
-        print('k = {}'.format(k))
-        print('')
-        try:
-            if dim_h < 4000:
-                a1, o = hubbard_akw_1d(L, N, t, u, k, order=None, lanczos_steps=None)
-                print('Integrals of exact:')
-                print(np.trapz(a1, o))
-                plt.plot(o, a1, label=k)
-            else:
-                print('Running naiive sparse')
-                a1, o = hubbard_akw_1d(L, N, t, u, k, order=100, lanczos_steps=None)
-                print('Integrals of naiive sparse:')
-                print(np.trapz(a1, o))
-                plt.plot(o, a1, label='k = {}'.format(np.round(k, 2)))
-        except:
-            pass
-    plt.legend()
-    plt.xlabel('omega/t')
-    plt.ylabel('A(k,omega)')
-    plt.title('L = {}, N = {}, u/t = {}'.format(L, N, (u/t)))
-    # plt.savefig(RESULT_FP + 'hubbard_ak_minus_L{}N{}U{}.png'.format(L, N, int(u/t)))
-    plt.savefig('hubbard_ak_minus_L{}N{}U{}.png'.format(L, N, int(u/t)))
-
-    # plt.show()
+                        e0 - N*mu, e_plus - (N+1)*mu, e_minus - (N-1)*mu, epsilon=eta)
+        ak_plus[i] = ap
+        ak_minus[i] = am
+    ns = find_nk(L//2, v0[:,0], basis)
+    return ak_plus, ak_minus, omegas, ns
