@@ -52,7 +52,11 @@ def casimir_dict(L, k1):
     return {'static': static}
 
 
-def hamiltonian_dict(L, G, k, no_kin=False, trig=False, g_spin=1, g_dens=1):
+def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
+    if G == -999:
+        no_kin=True # easier to input this.
+        G = 1
+        print('Zero k.e. hamiltonian')
     # k should include positive and negative values
     all_k = []
     ppairing = [] # spin 1 pairing
@@ -80,50 +84,52 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False, g_spin=1, g_dens=1):
             p_k2 = L + k2
             m_k2 = L - (k2+1)
             ppairing += [
-                         [Xkk, p_k1, m_k1, m_k2, p_k2]
+                         [2*Xkk, p_k1, m_k1, m_k2, p_k2]
                         ]
             zpairing += [
-                         [0.5*Xkk, p_k1, p_k2, m_k1, m_k2],
-                         [0.5*Xkk, m_k1, m_k2, p_k1, p_k2],
-                         [-0.5*Xkk, p_k1, m_k2, m_k1, p_k2],
-                         [-0.5*Xkk, m_k1, p_k2, p_k1, m_k2]
+                         [Xkk, p_k1, p_k2, m_k1, m_k2],
+                         [Xkk, m_k1, m_k2, p_k1, p_k2],
+                         [-1*Xkk, p_k1, m_k2, m_k1, p_k2],
+                         [-1*Xkk, m_k1, p_k2, p_k1, m_k2]
                         ]
-            s_c = 0.5*Xskk*g_spin
+            s_c = 0.5*Xskk
+            # s_c = Xskk*g_spin
             spm += [
                     [s_c, p_k1, p_k2, p_k1, p_k2],
                     [s_c, p_k1, m_k2, p_k1, m_k2],
                     [s_c, m_k1, p_k2, m_k1, p_k2],
                     [s_c, m_k1, m_k2, m_k1, m_k2]
                     ]
-            d_c = 0.5*Zkk*g_dens
-            samesame += [[0.5*d_c, p_k1, p_k2],
-                         [0.5*d_c, p_k1, m_k2],
-                         [0.5*d_c, m_k1, p_k2],
-                         [0.5*d_c, m_k1, m_k2]
+            d_c = 0.5*Zkk
+            if k1 != k2:
+                samesame += [[0.5*d_c, p_k1, p_k2],
+                             [0.5*d_c, p_k1, m_k2],
+                             [0.5*d_c, m_k1, p_k2],
+                             [0.5*d_c, m_k1, m_k2]
+                            ]
+                dens += [
+                         [-d_c, p_k1],
+                         [-d_c, m_k1],
+                         [-d_c, p_k2],
+                         [-d_c, m_k2]
                         ]
-            dens += [
-                     [-d_c, p_k1],
-                     [-d_c, m_k1],
-                     [-d_c, p_k2],
-                     [-d_c, m_k2]
-                    ]
     if no_kin:
         static = [
                 ['++--|', ppairing],
                 ['+-|+-', zpairing],
-                ['|++--', ppairing],
-                ['+-|-+', spm]
+                ['|++--', ppairing]
+                # ['+-|-+', spm]
                 ]
     else:
         static = [['n|', all_k], ['|n', all_k],
-                ['++--|', ppairing], ['--++|', ppairing],
-                ['+-|+-', zpairing], ['-+|-+', zpairing],
-                ['|++--', ppairing], ['|--++', ppairing],
-                ['+-|-+', spm], ['-+|+-', spm],
-                ['nn|', samesame], # the up/down density density stuff cancels
-                ['|nn', samesame],
-                ['n|', dens],
-                ['|n', dens]
+                ['++--|', ppairing], # ['--++|', ppairing],
+                ['+-|+-', zpairing], # ['-+|-+', zpairing],
+                ['|++--', ppairing], # ['|--++', ppairing],
+                # ['+-|-+', spm], ['-+|+-', spm],
+                # ['nn|', samesame], # the up/down density density stuff cancels
+                # ['|nn', samesame]
+                # ['n|', dens],
+                # ['|n', dens]
                 ]
 
     return {'static': static}
@@ -318,7 +324,8 @@ def ham_op(L, G, ks, basis, rescale_g=False, dtype=np.float64):
 
 def ham_op_2(L, G, ks, basis, rescale_g=True):
     hd = hamiltonian_dict(L, G, ks, no_kin=False)
-    h = quantum_operator(hd, basis=basis)
+
+    h = quantum_operator(hd, basis=basis, check_herm=False)
     return h
 
 
