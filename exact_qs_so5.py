@@ -341,8 +341,6 @@ def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):
             l1_lst += [[np.exp(1j*(k1-k2)*(l1))/(2*L), i, j]]
             l2_lst += [[np.exp(1j*(k1-k2)*(l2))/(2*L), i, j]]
 
-    print(l1_lst)
-    print(l2_lst)
     op1 = '+-|'
     op2 = '+-|'
     if s1 < 0:
@@ -364,7 +362,7 @@ def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    from seaborn import heatmap
+    # from seaborn import heatmap
     L = int(input('L: '))
     ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
     print(ks)
@@ -375,24 +373,30 @@ if __name__ == '__main__':
     basis = form_basis(2*L, Nup, Ndown)
 
     h = ham_op_2(L, G, ks, basis)
-    e, v = h.eigsh(k=1, which='LA')
+    e, v = h.eigsh(k=1, which='SA')
+    h0 = ham_op_2(L, 0, ks, basis)
+    e0, v0 = h0.eigsh(k=1, which='SA')
 
     ls = np.arange(1, 2*L+1)
-    pcs = np.zeros((2*L, 2*L))
+    pcs0 = np.zeros(2*L)
+    pcs = np.zeros(2*L)
+    l1 = 1
     for i in range(2*L):
-        for j in range(i+1):
-        # for j in range(2*L):
-            l1 = i + 1
-            l2 = j + 1
-            pc = pair_correlation(v[:,0], l1, l2, ks, basis)
-            print('Pair correlation for l1 = {}, l2 = {}'.format(l1, l2))
-            print(pc)
-            pcs[i, j] = np.real(pc)
-            pcs[j, i] = pcs[i,j]
+        l2 = i + 1
+        pc = pair_correlation(v[:,0], l1, l2, ks, basis)
+        pc0 = pair_correlation(v0[:,0], l1, l2, ks, basis)
+        pcs[i] = pc
+        pcs0[i] = pc0
     # heatmap(pcs, vmin=0, vmax=0.07)
-    heatmap(pcs, xticklabels=ls, yticklabels=ls)
+    # heatmap(pcs, xticklabels=ls, yticklabels=ls)
+    dens = .25*(Nup+Ndown)/L
+    plt.plot(np.abs(ls-l1), pcs/(dens**2), label='G = {}'.format(G))
+    plt.plot(np.abs(ls-l1), pcs0/(dens**2), label='G = 0')
+    plt.xlabel('|a-b|')
+    plt.ylabel('rho_{ab}/n^2')
+    plt.legend()
     plt.title('Pair correlation, L = {}, N = {}, G = {}'.format(
               2*L, Nup + Ndown, G
     ))
-    # plt.show()
-    plt.savefig('pair_L{}N{}G{}.png'.format(2*L, Nup+Ndown, np.round(G,2)))
+    plt.show()
+    # plt.savefig('pair_L{}N{}G{}.png'.format(2*L, Nup+Ndown, np.round(G,2)))

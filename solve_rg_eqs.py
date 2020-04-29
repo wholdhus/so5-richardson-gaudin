@@ -399,7 +399,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
             print('This is too bad')
             return
         if er < TOL and ds < 0.08:
-            log('Error is small. Increasing ds')
+            # log('Error is small. Increasing ds')
             ds *= 1.1
             prev_s = s
             prev_vars = vars
@@ -804,8 +804,9 @@ if __name__ == '__main__':
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
-        ho = ham_op(L, gf, ks, basis)
-        e, v = find_min_ev(ho, L, basis, n=min((dimH-1, 100)))
+        ho = ham_op(L, gf, ks, basis, rescale_g=False)
+        # e, v = find_min_ev(ho, L, basis, n=min((dimH-1, 100)))
+        e, v = ho.eigsh(k=10, which='SA')
         # e, v = ho.eigh()
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
