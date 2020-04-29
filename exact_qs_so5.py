@@ -1,8 +1,7 @@
 from quspin.basis import spinful_fermion_basis_1d
-from quspin.operators import quantum_operator
+from quspin.operators import quantum_operator, quantum_LinearOperator
 import numpy as np
 from scipy.optimize import root
-
 
 
 def form_basis(L, Nup, Ndown):
@@ -52,7 +51,11 @@ def casimir_dict(L, k1):
     return {'static': static}
 
 
-def hamiltonian_dict(L, G, k, no_kin=False, trig=False, g_spin=1, g_dens=1):
+def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
+    if G == -999:
+        no_kin=True # easier to input this.
+        G = 1
+        print('Zero k.e. hamiltonian')
     # k should include positive and negative values
     all_k = []
     ppairing = [] # spin 1 pairing
@@ -80,50 +83,52 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False, g_spin=1, g_dens=1):
             p_k2 = L + k2
             m_k2 = L - (k2+1)
             ppairing += [
-                         [Xkk, p_k1, m_k1, m_k2, p_k2]
+                         [2*Xkk, p_k1, m_k1, m_k2, p_k2]
                         ]
             zpairing += [
-                         [0.5*Xkk, p_k1, p_k2, m_k1, m_k2],
-                         [0.5*Xkk, m_k1, m_k2, p_k1, p_k2],
-                         [-0.5*Xkk, p_k1, m_k2, m_k1, p_k2],
-                         [-0.5*Xkk, m_k1, p_k2, p_k1, m_k2]
+                         [Xkk, p_k1, p_k2, m_k1, m_k2],
+                         [Xkk, m_k1, m_k2, p_k1, p_k2],
+                         [-1*Xkk, p_k1, m_k2, m_k1, p_k2],
+                         [-1*Xkk, m_k1, p_k2, p_k1, m_k2]
                         ]
-            s_c = 0.5*Xskk*g_spin
+            s_c = 0.5*Xskk
+            # s_c = Xskk*g_spin
             spm += [
                     [s_c, p_k1, p_k2, p_k1, p_k2],
                     [s_c, p_k1, m_k2, p_k1, m_k2],
                     [s_c, m_k1, p_k2, m_k1, p_k2],
                     [s_c, m_k1, m_k2, m_k1, m_k2]
                     ]
-            d_c = 0.5*Zkk*g_dens
-            samesame += [[0.5*d_c, p_k1, p_k2],
-                         [0.5*d_c, p_k1, m_k2],
-                         [0.5*d_c, m_k1, p_k2],
-                         [0.5*d_c, m_k1, m_k2]
+            d_c = 0.5*Zkk
+            if k1 != k2:
+                samesame += [[0.5*d_c, p_k1, p_k2],
+                             [0.5*d_c, p_k1, m_k2],
+                             [0.5*d_c, m_k1, p_k2],
+                             [0.5*d_c, m_k1, m_k2]
+                            ]
+                dens += [
+                         [-d_c, p_k1],
+                         [-d_c, m_k1],
+                         [-d_c, p_k2],
+                         [-d_c, m_k2]
                         ]
-            dens += [
-                     [-d_c, p_k1],
-                     [-d_c, m_k1],
-                     [-d_c, p_k2],
-                     [-d_c, m_k2]
-                    ]
     if no_kin:
         static = [
                 ['++--|', ppairing],
                 ['+-|+-', zpairing],
-                ['|++--', ppairing],
-                ['+-|-+', spm]
+                ['|++--', ppairing]
+                # ['+-|-+', spm]
                 ]
     else:
         static = [['n|', all_k], ['|n', all_k],
-                ['++--|', ppairing], ['--++|', ppairing],
-                ['+-|+-', zpairing], ['-+|-+', zpairing],
-                ['|++--', ppairing], ['|--++', ppairing],
-                ['+-|-+', spm], ['-+|+-', spm],
-                ['nn|', samesame], # the up/down density density stuff cancels
-                ['|nn', samesame],
-                ['n|', dens],
-                ['|n', dens]
+                ['++--|', ppairing], # ['--++|', ppairing],
+                ['+-|+-', zpairing], # ['-+|-+', zpairing],
+                ['|++--', ppairing], # ['|--++', ppairing],
+                # ['+-|-+', spm], ['-+|+-', spm],
+                # ['nn|', samesame], # the up/down density density stuff cancels
+                # ['|nn', samesame]
+                # ['n|', dens],
+                # ['|n', dens]
                 ]
 
     return {'static': static}
@@ -316,81 +321,78 @@ def ham_op(L, G, ks, basis, rescale_g=False, dtype=np.float64):
             h += quantum_operator(id, basis=basis, dtype=dtype)
     return h
 
-def ham_op_2(L, G, ks, basis, rescale_g=True):
-    hd = hamiltonian_dict(L, G, ks, no_kin=False)
-    h = quantum_operator(hd, basis=basis)
+def ham_op_2(L, G, ks, basis, rescale_g=True, no_kin=False):
+    hd = hamiltonian_dict(L, G, ks, no_kin=no_kin)
+
+    h = quantum_operator(hd, basis=basis, check_herm=False)
     return h
 
+
+def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):
+    # assuming l1, l2 are one-indexed
+    # calculates <n_{l1}n_{l2}>
+    # if s1 (s2) >= 0, use n_{\up}, else n_{\down}
+    L = len(ks)
+    ka = np.concatenate((-1*ks[::-1], ks))
+    l1_lst = []
+    l2_lst = []
+    for i, k1 in enumerate(ka):
+        for j, k2 in enumerate(ka):
+            l1_lst += [[np.exp(1j*(k1-k2)*(l1))/(2*L), i, j]]
+            l2_lst += [[np.exp(1j*(k1-k2)*(l2))/(2*L), i, j]]
+
+    print(l1_lst)
+    print(l2_lst)
+    op1 = '+-|'
+    op2 = '+-|'
+    if s1 < 0:
+        op1 = '|-+'
+    if s2 < 0:
+        op2 = '|-+'
+    l1_lo = quantum_operator({'static': [[op1, l1_lst]]}, basis=basis)
+
+    l2_lo = quantum_operator({'static': [[op2, l2_lst]]}, basis=basis)
+
+    n1 = l1_lo.matrix_ele(v,v)
+    n2 = l2_lo.matrix_ele(v,v)
+    if l1 == l2:
+        return np.vdot(v, l1_lo.matvec(l2_lo.matvec(v))) - n1
+    else:
+        return np.vdot(v, l1_lo.matvec(l2_lo.matvec(v)))
 
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    from seaborn import heatmap
     L = int(input('L: '))
-    ks = np.array([(2*i+1)*np.pi/L for i in range(L)])
+    ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
+    print(ks)
     # ks = np.arange(L) + 1.0
     G = float(input('G: '))
     Nup = int(input('Nup: '))
     Ndown = int(input('Ndown: '))
     basis = form_basis(2*L, Nup, Ndown)
 
-    cd = casimir_dict(L, 1)
-    co = quantum_operator(cd, basis=basis)
-    print(G)
-    h = ham_op(L, G, ks, basis)
-    if L <= 4 and Nup < 3:
-        es, vs = h.eigh()
-    else:
-        es, vs = find_min_ev(h, L, basis, 10)
-    print('GS energy:')
-    print(es)
-    input('press enter to continue')
-    nk0 = find_nk(L, vs[:,0], basis)
-    nk1 = find_nk(L, vs[:,1], basis)
+    h = ham_op_2(L, G, ks, basis)
+    e, v = h.eigsh(k=1, which='LA')
 
-    plt.scatter(range(2*L), nk0)
-    plt.scatter(range(2*L), nk1)
-    plt.show()
-    sz0 = find_sz(L, vs[:,0], basis)
-    sz1 = find_sz(L, vs[:,1], basis)
-    plt.scatter(range(2*L), sz0)
-    plt.scatter(range(2*L), sz1)
-    plt.show()
-
-
-    input('Press enter to continue')
-
-    gf = float(input('Final coupling: '))
-    h = ham_op(L, gf, ks, basis)
-    es, vs = find_min_ev(h, L, basis, 10)
-    print('Lowest energies:')
-    print(es)
-    if gf > 0:
-        gs = np.linspace(0, gf, 10)
-    else:
-        gs = np.linspace(gf, 0, 10)
-    print(gs)
-    e0s = np.zeros((10, 5))
-    for i in range(10):
-        print(i)
-        h = ham_op(L, gs[i], ks, basis)
-        if L < 5 and Nup < 3:
-            e, v = h.eigh()
-        else:
-            e, v = find_min_ev(h, L, basis, 5)
-        e0s[i] = e[:5]
-    for i in range(5):
-        plt.plot(gs, e0s[:, i])
-    plt.show()
-
-    if L < 4:
-        for i, e in enumerate(es[:10]):
-            v = vs[:, i]
-            print('Casimir operator for {}th excited state'.format(i))
-            print(co.matrix_ele(v, v))
-            kfull = np.concatenate((ks[::-1], ks))
-            v0 = vs[:,0]
-            nks = find_nk(L, v0, basis)
-            print('Nf: {}'.format(np.sum(nks)))
-            plt.scatter(kfull, nks)
-            plt.show()
+    ls = np.arange(1, 2*L+1)
+    pcs = np.zeros((2*L, 2*L))
+    for i in range(2*L):
+        for j in range(i+1):
+        # for j in range(2*L):
+            l1 = i + 1
+            l2 = j + 1
+            pc = pair_correlation(v[:,0], l1, l2, ks, basis)
+            print('Pair correlation for l1 = {}, l2 = {}'.format(l1, l2))
+            print(pc)
+            pcs[i, j] = np.real(pc)
+            pcs[j, i] = pcs[i,j]
+    # heatmap(pcs, vmin=0, vmax=0.07)
+    heatmap(pcs, xticklabels=ls, yticklabels=ls)
+    plt.title('Pair correlation, L = {}, N = {}, G = {}'.format(
+              2*L, Nup + Ndown, G
+    ))
+    # plt.show()
+    plt.savefig('pair_L{}N{}G{}.png'.format(2*L, Nup+Ndown, np.round(G,2)))

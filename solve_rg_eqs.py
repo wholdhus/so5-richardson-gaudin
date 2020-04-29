@@ -377,7 +377,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
     #     log(vars - vars0)
     return sol
 
-def increment_im_k(vars, dims, g, k, im_k, steps=100):
+def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
     L, Ne, Nw = dims
     # scale = 1 - np.linspace(0, sf, steps)
     ds = 1./steps
@@ -390,16 +390,17 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100):
         prev_s = s
 
         kc = np.concatenate((k, s*im_k))
-        sol = find_root_multithread(vars, kc, g, dims, max(s, 10**-4),
-                                    max_steps=MAX_STEPS)
+        im_v = min(np.linalg.norm(s*im_k), 10**-6)
+        sol = find_root_multithread(vars, kc, g, dims, im_v,
+                                    max_steps=max_steps)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 0.001:
             print('This is too bad')
             return
         if er < TOL and ds < 0.08:
-            log('Error is small. Reducing ds')
-            ds *= 2
+            log('Error is small. Increasing ds')
+            ds *= 1.1
             prev_s = s
             prev_vars = vars
             s -= ds
@@ -461,7 +462,6 @@ def calculate_n_k(Rs, gs):
         dRs[:, k] = dRk
         nks[:, k] = nk
     return dRs, nks
-
 
 
 def bootstrap_g0(dims, g0, kc,
@@ -636,6 +636,7 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         Gs = g_to_G(gs, k)
     elif gf < 0:
         gs = np.append(-1*np.arange(-1*g0, -1*gf, dg), gf)
+        Gs = g_to_G(gs, k)
     log('gs')
     log(gs)
 
@@ -647,8 +648,6 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print(es)
     print(ws)
 
-    # print('')
-    # print('Incrementing g with complex k from {} up to {}'.format(gs[0], gf))
     keep_going = True
     i = 0
     varss = []
@@ -685,15 +684,19 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log(cws - k_full[np.arange(Nw)//2])
             elif i % skip == 0 or g == gf:
                 log('Removing im(k) at g = {}'.format(g))
-                vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                              steps=10*L)
-                varss += [vars_r]
-                es, ws = unpack_vars(vars_r, Ne, Nw)
-                print('Variables after removing im(k)')
-                print(es)
-                print(ws)
-                gss += [g]
-                log('Stored values at {}'.format(g))
+                try:
+                    vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
+                                                steps=10*L,
+                                                max_steps=10*JOBS)
+                    varss += [vars_r]
+                    es, ws = unpack_vars(vars_r, Ne, Nw)
+                    print('Variables after removing im(k)')
+                    print(es)
+                    print(ws)
+                    gss += [g]
+                    log('Stored values at {}'.format(g))
+                except:
+                    log('Took more than {} steps to remove im(k)'.format(10*JOBS))
             i += 1
             log('Finished with g = {}'.format(g))
         except Exception as e:
@@ -759,11 +762,12 @@ if __name__ == '__main__':
     gf = G_to_g(Gf, ks)
     print('Input G corresponds to g = {}'.format(gf))
 
-    output_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk, imscale_v=imv)
+    output_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
+                              imscale_v=imv, skip=4)
     print('')
     print('Solution found:')
 
-    output_df.to_csv('{}_{}_{}.csv'.format(L, Ne+Nw, Gf))
+    # output_df.to_csv('{}_{}_{}.csv'.format(L, Ne+Nw, Gf))
 
 
     Gf_actual = np.array(output_df['G'])[-1]
@@ -773,8 +777,24 @@ if __name__ == '__main__':
     print(rge)
 
     dimH = binom(2*L, Ne)*binom(2*L, Nw)
-
-    plt.scatter(output_df['G'], output_df['energy'])
+    G = output_df['G']
+    E = output_df['energy']
+    dE = np.gradient(E, G)
+    d2E = np.gradient(dE, G)
+    d3E = np.gradient(d2E, G)
+    plt.figure(figsize=(12,8))
+    plt.subplot(2,2,1)
+    plt.scatter(G, E)
+    plt.title('Energy')
+    plt.subplot(2,2,2)
+    plt.scatter(G[5:-5], dE[5:-5])
+    plt.title('dE')
+    plt.subplot(2,2,3)
+    plt.scatter(G[5:-5], d2E[5:-5])
+    plt.title('d2E')
+    plt.subplot(2,2,4)
+    plt.scatter(G[5:-5], d3E[5:-5])
+    plt.title('d3E')
     plt.show()
 
     print('Hilbert space dimension: {}'.format(dimH))

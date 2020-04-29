@@ -1,7 +1,7 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator, quantum_LinearOperator
 # from quspin.tools.misc import dot
-from exact_qs_so5 import form_basis, find_min_ev, ham_op, find_nk, ham_op
+from exact_qs_so5 import form_basis, ham_op, find_nk, ham_op_2
 import numpy as np
 # from scipy.sparse.linalg import eigsh
 from tqdm import tqdm
@@ -50,6 +50,7 @@ def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
     # return (np.sum(gps) - np.sum(gms)).imag/(-1*np.pi), (np.sum(gm2) - np.sum(gp2)).imag/np.pi
     return np.sum(gp2).imag/np.pi, np.sum(gm2.imag)/np.pi
 
+
 def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     """
     Gets matrix elements between creation and annihilation
@@ -95,7 +96,8 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     return np.abs(celts)**2, np.abs(delts)**2
 
 
-def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
+def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
+                      eta=None):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -104,11 +106,17 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op(L, G, ks, basis, rescale_g=True)
-    hp = ham_op(L, G, ks, basisp, rescale_g=True)
-    hm = ham_op(L, G, ks, basism, rescale_g=True)
+    h = ham_op_2(L, G, ks, basis, rescale_g=True)
+    hp = ham_op_2(L, G, ks, basisp, rescale_g=True)
+    hm = ham_op_2(L, G, ks, basism, rescale_g=True)
     if n_states == -999:
-        e, v = h.eigsh(k=1, which='SA')
+        if G != -999:
+            e, v = h.eigsh(k=1, which='SA')
+        else:
+            print('Probably degenerate ground state')
+            e, v = h.eigh()
+            print('Energies:')
+            print(e)
         e0 = e[0]
         v0 = basis.get_vec(v[:,0], sparse=False)
         # e, v = h.eigh()
@@ -120,6 +128,11 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
         v0 = basis.get_vec(v[:,0], sparse=False)
         ep, vp = hp.eigsh(k=n_states, which='SA')
         em, vm = hm.eigsh(k=n_states, which='SA')
+    mu = (ep[0] - em[0])/2
+    print('Fermi energy: {}'.format(mu))
+    e0 -= N*mu
+    ep -= (N+1)*mu
+    em -= (N-1)*mu
 
     celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
     print('Largest matrix elements: Creation')
@@ -133,27 +146,95 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999):
         ak_plus = np.zeros(steps)
         ak_minus = np.zeros(steps)
 
-        relevant_es = []
-        for i, c in enumerate(celts):
-            if c > 10**-8:
-                relevant_es += [ep[i]]
-        for i, c in enumerate(delts):
-            if c > 10**-8:
-                relevant_es += [em[i]]
-        lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
-        highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
-        omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
+        all_es = np.concatenate((ep, em))
+        lowmega = min((e0 - max(all_es),
+                   min(all_es) - e0))
+        highmega = max((max(all_es) - e0,
+                    e0 - min(all_es)))
+        omegas = np.linspace(1.5*lowmega, 1.5*highmega, steps)
     else:
         omegas = steps
         ak_plus, ak_minus = np.zeros(len(omegas)), np.zeros(len(omegas))
-    epsilon = np.mean(np.diff(omegas))
-    # epsilon = .1
+    if eta is None:
+        eta = np.mean(np.diff(omegas))
     for i, o in enumerate(omegas):
-        ak_plus[i], ak_minus[i] = akboth(o, celts, delts, e0, ep, em, epsilon=epsilon)
+        ak_plus[i], ak_minus[i] = akboth(o, celts, delts, e0, ep, em, epsilon=eta)
 
     ns = find_nk(L, v[:,0], basis)
     return ak_plus, ak_minus, omegas, ns
 
+def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
+                      eta=None):
+    Nup = N//2
+    Ndown = N//2
+    if k is None:
+        k = L + Nup//2
+    basis = form_basis(2*L, Nup, Ndown)
+    basism = form_basis(2*L, Nup-1, Ndown)
+    basisp = form_basis(2*L, Nup+1, Ndown)
+    basisf = spinful_fermion_basis_1d(2*L)
+    h = ham_op_2(L, -999, ks, basis, rescale_g=True)
+    hp = ham_op_2(L, -999, ks, basisp, rescale_g=True)
+    hm = ham_op_2(L, -999, ks, basism, rescale_g=True)
+
+    es, v = h.eigh()
+
+    v00 = np.zeros(len(es), dtype=np.complex128)
+    e0 = 0
+    # zero_inds = np.abs(es) < 10**-14
+
+    # zero_states = v[:, zero_inds]
+    n_zero = 0
+    for i, e in enumerate(es):
+        if np.abs(e - es[0]) < 10**-8:
+            v00 += v[:, i]
+            n_zero += 1
+    print('{} out of {} states have degenerate energy'.format(n_zero, len(es)))
+    e0 = es[0] # should be zero
+    if n_zero == 1: # nondegenerate g.s.
+        v00 = v[:,0]
+    else:
+        # v00 = v[:,0]
+        v00 *= 1./np.linalg.norm(v00)
+    v0 = basis.get_vec(v00, sparse=False)
+    # e, v = h.eigh()
+    ep, vp = hp.eigh()
+    em, vm = hm.eigh()
+
+    mu = (ep[0] - em[0])/2
+    print('Fermi energy: {}'.format(mu))
+    e0 -= N*mu
+    ep -= (N+1)*mu
+    em -= (N-1)*mu
+
+    celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
+    print('Largest matrix elements: Creation')
+    print(np.max(celts))
+    print(np.argmax(celts))
+    print('Annihilation')
+    print(np.max(delts))
+    print(np.argmax(delts))
+
+    if np.shape(steps) == ():
+        ak_plus = np.zeros(steps)
+        ak_minus = np.zeros(steps)
+
+        all_es = np.concatenate((ep, em))
+        lowmega = min((e0 - max(all_es),
+                   min(all_es) - e0))
+        highmega = max((max(all_es) - e0,
+                    e0 - min(all_es)))
+        omegas = np.linspace(1.5*lowmega, 1.5*highmega, steps)
+    else:
+        omegas = steps
+        ak_plus, ak_minus = np.zeros(len(omegas)), np.zeros(len(omegas))
+    if eta is None:
+        eta = np.mean(np.diff(omegas))
+    for i, o in enumerate(omegas):
+        ak_plus[i], ak_minus[i] = akboth(o, celts, delts, e0, ep, em, epsilon=eta)
+
+    ns = find_nk(L, v00, basis)
+    return ak_plus, ak_minus, omegas, ns
 
 def check_nonint_spectral_fun(L, N, disp, steps=1000):
     ks = np.arange(L, 2*L)
@@ -411,49 +492,48 @@ def method_comparison_plots(params=None):
 def plot_multiple_ks():
     L = int(input('L: '))
     N = int(input('N: '))
-    G = float(input('G: '))
-    kf = int(input('Which k?: '))
+    u = float(input('u: '))
+    if u != -999:
+        G = 2.*u/L
+    else:
+        G = u # this is how to get no k e
+    print('Equivalent G:')
+    print(G)
+    # kf = int(input('Which k?: '))
 
-    ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
+    ks = np.array([(2*i+1)*np.pi/(L) for i in range(L//2)]) # actually only the positive ones
     steps = 1000
 
     # check_nonint_spectral_fun(L, N, ks, steps=1000)
-    dimH = binom(2*L, N//2)**2
-    colors = ['blue','magenta','green','orange','purple','red','cyan']
+    colors = ['red','orange','magenta','pink']
     styles = [':', '-.', '--']
     xmin = 0
     xmax = 0
     plt.figure(figsize=(12, 8))
-    if dimH < 4000:
-        i = 0
-        for j, k in enumerate(ks):
-            ki = j + L
-            print('***********************************')
-            print('Full diagonalization for k = {}:'.format(k))
-            print('')
-            a_plus, a_minus, os, ns = find_spectral_fun(L, N, G, ks, steps, k=ki)
-            plt.plot(os, a_minus+a_plus, color=colors[i%len(colors)])
-            plt.scatter(os, a_minus, label='A^-, k = {}'.format(np.round(k, 2)), marker='v', color=colors[i%len(colors)])
-            plt.scatter(os, a_plus, label='A^+, k = {}'.format(np.round(k,2)), marker='^', color=colors[i%len(colors)])
-            xmin = min((min(os), xmin))
-            xmax = max((max(os), xmax))
-            print('')
-            print('Integral')
-            print(np.trapz(a_plus+a_minus, os))
-            i += 1
-
-        plt.xlabel('omega')
-        plt.ylabel('A(k, omega)')
-        plt.xlim(xmin, xmax)
-        plt.title('L = {}, N = {}, G = {}'.format(L, N, G))
-        plt.legend()
-    else:
-        print('Too big for full diagonalization, :(')
-        a_plus, a_minus, os, ns = find_spectral_fun(L, N, G, ks, steps, k=kf, n_states=100)
-        plt.plot(os, a_minus, label='Naiive sparse, 100 states', color = 'm')
+    i = 0
+    for j, k in enumerate(ks):
+        ki = j + L//2
+        print('***********************************')
+        print('Full diagonalization for k = {}:'.format(k))
+        print('')
+        # a_plus, a_minus, os, ns = find_spectral_fun(L//2, N, G, ks, steps, k=ki, eta=0.1)
+        a_plus, a_minus, os, ns = find_degenerate_spectral_fun(L//2, N, ks, steps, k=ki, eta=0.1)
+        plt.plot(os, a_minus+a_plus, color=colors[i%len(colors)], label='k = {}'.format(np.round(k,2)))
+        # plt.scatter(os, a_minus, label='A^-, k = {}'.format(np.round(k, 2)), marker='v', color=colors[i%len(colors)])
+        # plt.scatter(os, a_plus, label='A^+, k = {}'.format(np.round(k,2)), marker='^', color=colors[i%len(colors)])
+        # xmin = min((min(os[a_plus + a_minus > 10**-3]), xmin))
+        # xmax = max((max(os[a_plus + a_minus > 10**-3]), xmax))
         print('')
         print('Integral')
-        print(np.trapz(a_plus + a_minus, os))
+        print(np.trapz(a_plus+a_minus, os))
+        i += 1
+
+    plt.xlabel('omega')
+    plt.ylabel('A(k, omega)')
+    # plt.xlim(xmin, xmax)
+    plt.title('L = {}, N = {}, u/t = infinity'.format(L, N))
+    plt.legend()
+
 
     f = input('Filename to save figure, or blank to display plot')
     if f == '':
@@ -461,9 +541,18 @@ def plot_multiple_ks():
     else:
         plt.savefig(f)
 
+    n = input('Type nk to plot nk: ')
+    if n == 'nk':
+        plt.scatter(np.concatenate((-1*ks[::-1], ks)), ns)
+        plt.xlabel('k')
+        plt.ylabel('<n_k>')
+        plt.show()
+
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     # plot_multiple_ks()
     params = {'L': 6, 'N': 6, 'G': 2./3, 'kf': 6}
     method_comparison_plots(params=params)
+    # plot_multiple_ks()
+    # method_comparison_plots()
