@@ -355,11 +355,17 @@ def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000):
     return aks_p, aks_m, omegas
 
 
-def method_comparison_plots():
-    L = int(input('L: '))
-    N = int(input('N: '))
-    G = float(input('G: '))
-    kf = int(input('Which k?: '))
+def method_comparison_plots(params=None):
+    if params is None:
+        L = int(input('L: '))
+        N = int(input('N: '))
+        G = float(input('G: '))
+        kf = int(input('Which k?: '))
+    else:
+        L = params['L']
+        N = params['N']
+        G = params['G']
+        kf = params['kf']
 
     ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
     steps = 1000
@@ -376,13 +382,15 @@ def method_comparison_plots():
     xmin = 0
     xmax = 0
     plt.figure(figsize=(12, 8))
+    ap, am, os, ns = find_spectral_fun(L, N, G, ks, steps=steps, k=kf)
     ap_100, am_100, os_100 = lanczos_akw(L, N, G, ks, order=100, kf=kf, steps=steps)
-    os = os_100 # this should capture the full range of peaks
+    # os = os_100 # this should capture the full range of peaks
     ap_20, am_20, os_20 = lanczos_akw(L, N, G, ks, order=20, kf=kf, steps=os)
 
-    ap_s_20, am_s_20, os_s_20, ns = find_spectral_fun(L, N, G, ks, steps=os_full, k=kf, n_states=20)
+    ap_s_20, am_s_20, os_s_20, ns = find_spectral_fun(L, N, G, ks, steps=os, k=kf, n_states=20)
     ap_s_100, am_s_100, os_s_100, ns = find_spectral_fun(L, N, G, ks, steps=os, k=kf, n_states=100)
 
+    plt.plot(os, am+ap, label='Full diagonalization'), 
     plt.scatter(os_s_20, ap_s_20 + am_s_20, label = 'Sparse, 20 states', marker='1', color='magenta', s=20)
     plt.scatter(os_s_100, ap_s_100 + am_s_100, label = 'Sparse, 100 states', marker='2', color='green', s=20)
     plt.scatter(os_20, ap_20 + am_20, label = 'Lanczos, 20 steps', marker='o', color='orange', s=20)
@@ -456,4 +464,6 @@ def plot_multiple_ks():
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    plot_multiple_ks()
+    # plot_multiple_ks()
+    params = {'L': 6, 'N': 6, 'G': 2./3, 'kf': 6}
+    method_comparison_plots(params=params)
