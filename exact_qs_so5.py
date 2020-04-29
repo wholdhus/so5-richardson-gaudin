@@ -376,27 +376,32 @@ if __name__ == '__main__':
     e, v = h.eigsh(k=1, which='SA')
     h0 = ham_op_2(L, 0, ks, basis)
     e0, v0 = h0.eigsh(k=1, which='SA')
+    hn = ham_op_2(L, -1*G, ks, basis)
+    en, vn = h.eigsh(k=1, which='SA')
 
     ls = np.arange(1, 2*L+1)
     pcs0 = np.zeros(2*L)
     pcs = np.zeros(2*L)
+    pcsn = np.zeros(2*L)
     l1 = 1
     for i in range(2*L):
         l2 = i + 1
         pc = pair_correlation(v[:,0], l1, l2, ks, basis)
         pc0 = pair_correlation(v0[:,0], l1, l2, ks, basis)
+        pcn = pair_correlation(vn[:,0], l1, l2, ks, basis)
         pcs[i] = pc
         pcs0[i] = pc0
+        pcsn[i] = pcn
     # heatmap(pcs, vmin=0, vmax=0.07)
     # heatmap(pcs, xticklabels=ls, yticklabels=ls)
     dens = .25*(Nup+Ndown)/L
     plt.plot(np.abs(ls-l1), pcs/(dens**2), label='G = {}'.format(G))
     plt.plot(np.abs(ls-l1), pcs0/(dens**2), label='G = 0')
+    plt.plot(np.abs(ls-l1), pcsn/(dens**2), label='G = {}'.format(-1*G))
     plt.xlabel('|a-b|')
     plt.ylabel('rho_{ab}/n^2')
     plt.legend()
-    plt.title('Pair correlation, L = {}, N = {}, G = {}'.format(
-              2*L, Nup + Ndown, G
-    ))
-    plt.show()
-    # plt.savefig('pair_L{}N{}G{}.png'.format(2*L, Nup+Ndown, np.round(G,2)))
+    plt.title('Pair correlation, L = {}, N = {}'.format(
+              2*L, Nup + Ndown))
+    # plt.show()
+    plt.savefig('pair_L{}N{}.png'.format(2*L, Nup+Ndown))
