@@ -358,10 +358,46 @@ def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):
     else:
         return np.vdot(v, l1_lo.matvec(l2_lo.matvec(v)))
 
+def pairing_correlation(v, l1, l2, ks, basis, sep=1):
+    # doing spin up pairs for now
+    # one fermion @ l1, other l1+sep
+    L = 2*len(ks)
+    ka = np.concatenate((-1*ks[::-1], ks))
+    pair1_lst = []
+    pair2_lst = []
+    pair3_lst = []
+    l3 = (l1 + sep - 1)%L + 1
+    l4 = (l2 + sep - 1)%L + 1
+    # l1 = a, l3 = b, l2 = c, l4 = d
+    for i, k1 in enumerate(ka):
+        for j, k2 in enumerate(ka):
+            # print('coeffs')
+            # print(np.exp(1j*(k1*l1-k2*l2))/L)
+            # print(np.exp(1j*(k1*l3 - k2*l4))/L)
+            pair1_lst += [[np.exp(1j*(k1*l1-k2*l2))/L, i, j]]
+            pair2_lst += [[np.exp(1j*(k1*l3 - k2*l4))/L, i, j]]
+            pair3_lst += [[np.exp(1j*(k1*l1 - k2*l4))/L, i,j]]
+    pair1 = quantum_operator({'static': [['+-|', pair1_lst]]}, basis=basis,
+                             check_herm=False)
+    pair2 = quantum_operator({'static': [['+-|', pair2_lst]]}, basis=basis,
+                             check_herm=False)
+    # pair1 += pair1.H
+    # pair2 += pair2.H
+    out = np.vdot(v, pair1.matvec(pair2.matvec(v)))
+    if l2 == l3:
+        print('Using the delta function!')
+        pair3 = quantum_operator({'static': [['+-|', pair3_lst]]}, basis=basis,
+                                 check_herm=False)
+        # pair3 += pair3.H
+        out -= np.vdot(v, pair3.matvec(v))
+    return out
 
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
+    from matplotlib import rc
+    rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
+    rc('text', usetex=True)
     # from seaborn import heatmap
     L = int(input('L: '))
     ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
@@ -370,6 +406,7 @@ if __name__ == '__main__':
     G = float(input('G: '))
     Nup = int(input('Nup: '))
     Ndown = int(input('Ndown: '))
+    sep = int(input('Pair separation: '))
     basis = form_basis(2*L, Nup, Ndown)
 
     h = ham_op_2(L, G, ks, basis)
@@ -377,31 +414,36 @@ if __name__ == '__main__':
     h0 = ham_op_2(L, 0, ks, basis)
     e0, v0 = h0.eigsh(k=1, which='SA')
     hn = ham_op_2(L, -1*G, ks, basis)
-    en, vn = h.eigsh(k=1, which='SA')
+    en, vn = hn.eigsh(k=1, which='SA')
 
     ls = np.arange(1, 2*L+1)
     pcs0 = np.zeros(2*L)
     pcs = np.zeros(2*L)
     pcsn = np.zeros(2*L)
+    # l1 = 3
     l1 = 1
     for i in range(2*L):
-        l2 = i + 1
-        pc = pair_correlation(v[:,0], l1, l2, ks, basis)
-        pc0 = pair_correlation(v0[:,0], l1, l2, ks, basis)
-        pcn = pair_correlation(vn[:,0], l1, l2, ks, basis)
-        pcs[i] = pc
-        pcs0[i] = pc0
-        pcsn[i] = pcn
+        # l2 = i%(2*L) + 1
+        l2 = i+1
+        pc = pairing_correlation(v[:,0], l1, l2, ks, basis, sep=sep)
+        pc0 = pairing_correlation(v0[:,0], l1, l2, ks, basis, sep=sep)
+        pcn = pairing_correlation(vn[:,0], l1, l2, ks, basis, sep=sep)
+        print('pc')
+        print(pc)
+        pcs[i] = np.abs(pc)**2
+        pcs0[i] = np.abs(pc0)**2
+        pcsn[i] = np.abs(pcn)**2
+
     # heatmap(pcs, vmin=0, vmax=0.07)
     # heatmap(pcs, xticklabels=ls, yticklabels=ls)
     dens = .25*(Nup+Ndown)/L
-    plt.plot(np.abs(ls-l1), pcs/(dens**2), label='G = {}'.format(G))
-    plt.plot(np.abs(ls-l1), pcs0/(dens**2), label='G = 0')
-    plt.plot(np.abs(ls-l1), pcsn/(dens**2), label='G = {}'.format(-1*G))
-    plt.xlabel('|a-b|')
-    plt.ylabel('rho_{ab}/n^2')
+    plt.plot(np.abs(ls-l1), pcs, label='G = {}'.format(G))
+    plt.plot(np.abs(ls-l1), pcs0, label='G = 0')
+    plt.plot(np.abs(ls-l1), pcsn, label='G = {}'.format(-1*G))
+    plt.xlabel(r'$|a-b|$')
+    plt.ylabel(r'$P_{ab}$')
     plt.legend()
-    plt.title('Pair correlation, L = {}, N = {}'.format(
-              2*L, Nup + Ndown))
+    plt.title(r'Pair correlation, L = {}, N = {}, $\delta = ${}'.format(
+              2*L, Nup + Ndown, sep))
     # plt.show()
-    plt.savefig('pair_L{}N{}.png'.format(2*L, Nup+Ndown))
+    plt.savefig('pairing_L{}N{}sep{}.png'.format(2*L, Nup+Ndown, sep))
