@@ -1,7 +1,7 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator, quantum_LinearOperator
 # from quspin.tools.misc import dot
-from exact_qs_so5 import form_basis, ham_op, find_nk, ham_op_2
+from exact_qs_so5 import form_basis, ham_op, find_nk, ham_op_2, find_skz
 import numpy as np
 # from scipy.sparse.linalg import eigsh
 from tqdm import tqdm
@@ -471,7 +471,7 @@ def method_comparison_plots(params=None):
     ap_s_20, am_s_20, os_s_20, ns = find_spectral_fun(L, N, G, ks, steps=os, k=kf, n_states=20)
     ap_s_100, am_s_100, os_s_100, ns = find_spectral_fun(L, N, G, ks, steps=os, k=kf, n_states=100)
 
-    plt.plot(os, am+ap, label='Full diagonalization'), 
+    plt.plot(os, am+ap, label='Full diagonalization'),
     plt.scatter(os_s_20, ap_s_20 + am_s_20, label = 'Sparse, 20 states', marker='1', color='magenta', s=20)
     plt.scatter(os_s_100, ap_s_100 + am_s_100, label = 'Sparse, 100 states', marker='2', color='green', s=20)
     plt.scatter(os_20, ap_20 + am_20, label = 'Lanczos, 20 steps', marker='o', color='orange', s=20)
@@ -548,11 +548,80 @@ def plot_multiple_ks():
         plt.ylabel('<n_k>')
         plt.show()
 
+def analyze_spectral_guys(L, N, G, ks, k=None):
+    Nup = N//2
+    Ndown = N//2
+    if k is None:
+        k = L + Nup//2
+    basis = form_basis(2*L, Nup, Ndown)
+    basism = form_basis(2*L, Nup-1, Ndown)
+    basisp = form_basis(2*L, Nup+1, Ndown)
+    basisf = spinful_fermion_basis_1d(2*L)
+    h = ham_op_2(L, G, ks, basis, rescale_g=True)
+    hp = ham_op_2(L, G, ks, basisp, rescale_g=True)
+    hm = ham_op_2(L, G, ks, basism, rescale_g=True)
+    e, v = h.eigsh(k=1, which='SA')
+    e0 = e[0]
+    v0 = basis.get_vec(v[:,0], sparse=False)
+    ep, vp = hp.eigh()
+    em, vm = hm.eigh()
+
+    celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
+
+    vc = vp[:, np.argmax(celts)]
+
+    vd = vm[:, np.argmax(delts)]
+
+    n0 = find_nk(L, v[:,0], basis)
+    nc = find_nk(L, vc, basisp)
+    nd = find_nk(L, vd, basism)
+
+    s0 = find_skz(L, v[:,0], basis)
+    sc = find_skz(L, vc, basisp)
+    sd = find_skz(L, vd, basism)
+
+    ka = np.concatenate((-1*ks[::-1], ks))
+    plt.figure(figsize=(12,8))
+
+    plt.subplot(3,1,1)
+    plt.scatter(ka, n0, label = np.round(np.sum(n0),0))
+    plt.scatter(ka, nc, label = np.round(np.sum(nc),0))
+    plt.scatter(ka, nd, label = np.round(np.sum(nd),0))
+    plt.xlabel('k')
+    plt.ylabel('n_k')
+    plt.ylim(0, 2.2)
+    plt.legend()
+
+    plt.subplot(3,1,2)
+    plt.scatter(ka, s0, label = np.round(np.sum(s0),1))
+    plt.scatter(ka, sc, label = np.round(np.sum(sc),1))
+    plt.scatter(ka, sd, label = np.round(np.sum(sd),1))
+    plt.xlabel('k')
+    plt.ylabel('s_k^z')
+    plt.ylim(-0.5, 0.5)
+    plt.legend()
+
+    akp, akm, o, _ = find_spectral_fun(L, N, G, ks, k=k,
+                                       eta=0.1)
+    plt.subplot(3,1,3)
+    plt.plot(o, akp, label = 'A^+')
+    plt.plot(o, akm, label = 'A^-')
+    plt.xlabel('omega')
+    plt.ylabel('A^+/-(k,omega)')
+    plt.legend()
+
+    plt.show()
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     # plot_multiple_ks()
-    params = {'L': 6, 'N': 6, 'G': 2./3, 'kf': 6}
-    method_comparison_plots(params=params)
+    L = 4
+    N = 12
+    G = 0.5
+    ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)]) # actually only the positive ones
+    kf = L + N//4
+    analyze_spectral_guys(L, N, G, ks, k=kf)
+    # params = {'L': 6, 'N': 6, 'G': 2./3, 'kf': 6}
+    # method_comparison_plots(params=params)
     # plot_multiple_ks()
     # method_comparison_plots()

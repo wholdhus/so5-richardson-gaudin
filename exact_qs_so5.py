@@ -1,7 +1,8 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator, quantum_LinearOperator
 import numpy as np
-from scipy.optimize import root
+from tqdm import tqdm
+
 
 
 def form_basis(L, Nup, Ndown):
@@ -231,6 +232,19 @@ def find_nk(L, state, basis):
         nks[k] = Nup.matrix_ele(state, state) + Ndown.matrix_ele(state,state)
     return nks
 
+def find_skz(L, state, basis):
+    sks = np.zeros(2*L)
+    for k in range(2*L):
+        nval = [[1.0, k]]
+        nt = [['n|', nval]]
+        dic = {'static': nt}
+        Nup = quantum_operator(dic, basis=basis)
+        nt = [['|n', nval]]
+        dic = {'static': nt}
+        Ndown = quantum_operator(dic, basis=basis)
+        sks[k] = 0.5*(Nup.matrix_ele(state, state) - Ndown.matrix_ele(state,state))
+    return sks
+
 
 def find_sz(L, state, basis):
     szs = np.zeros(2*L)
@@ -358,39 +372,66 @@ def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):
     else:
         return np.vdot(v, l1_lo.matvec(l2_lo.matvec(v)))
 
-def pairing_correlation(v, l1, l2, ks, basis, sep=1):
-    # doing spin up pairs for now
-    # one fermion @ l1, other l1+sep
+
+def eta(x, ks):
+    return -2j*np.sum(ks*np.sin(ks*x))
+
+
+
+def pairing_correlation(vs, i, j, ks, basis):
+
     L = 2*len(ks)
+    ls = np.arange(1, L+1)
     ka = np.concatenate((-1*ks[::-1], ks))
-    pair1_lst = []
-    pair2_lst = []
-    pair3_lst = []
-    l3 = (l1 + sep - 1)%L + 1
-    l4 = (l2 + sep - 1)%L + 1
-    # l1 = a, l3 = b, l2 = c, l4 = d
-    for i, k1 in enumerate(ka):
-        for j, k2 in enumerate(ka):
-            # print('coeffs')
-            # print(np.exp(1j*(k1*l1-k2*l2))/L)
-            # print(np.exp(1j*(k1*l3 - k2*l4))/L)
-            pair1_lst += [[np.exp(1j*(k1*l1-k2*l2))/L, i, j]]
-            pair2_lst += [[np.exp(1j*(k1*l3 - k2*l4))/L, i, j]]
-            pair3_lst += [[np.exp(1j*(k1*l1 - k2*l4))/L, i,j]]
-    pair1 = quantum_operator({'static': [['+-|', pair1_lst]]}, basis=basis,
-                             check_herm=False)
-    pair2 = quantum_operator({'static': [['+-|', pair2_lst]]}, basis=basis,
-                             check_herm=False)
-    # pair1 += pair1.H
-    # pair2 += pair2.H
-    out = np.vdot(v, pair1.matvec(pair2.matvec(v)))
-    if l2 == l3:
-        print('Using the delta function!')
-        pair3 = quantum_operator({'static': [['+-|', pair3_lst]]}, basis=basis,
-                                 check_herm=False)
-        # pair3 += pair3.H
-        out -= np.vdot(v, pair3.matvec(v))
-    return out
+
+    pvs = [np.zeros(len(v), dtype=np.complex128) for v in vs]
+
+    for m in tqdm(ls):
+        for n in ls:
+            pair1_lst = []
+            pair2_lst = []
+            pair3_lst = []
+            pair4_lst = []
+            # pairing function
+            pf = eta(i-m, ks)*np.conjugate(eta(j-n, ks))
+            for k1_ind, k1 in enumerate(ka):
+                for k2_ind, k2 in enumerate(ka):
+                    # c_i^+ c_j
+                    pair1_lst += [[np.exp(1j*(k1*i - k2*j))/L, k1_ind, k2_ind]]
+                    # c_m^+ c_n
+                    pair2_lst += [[np.exp(1j*(k1*m - k2*n))/L, k1_ind, k2_ind]]
+                    # c_i^+ c_n
+                    pair3_lst += [[np.exp(1j*(k1*i - k2*n))/L, k1_ind, k2_ind]]
+                    # c_m^+ c_j
+                    pair4_lst += [[np.exp(1j*(k1*m - k2*j))/L, k1_ind, k2_ind]]
+            if m == 1: # otherwise, we've already defined these
+                ij_up = quantum_operator({'static': [['+-|', pair1_lst]]}, basis=basis,
+                                check_herm=False, check_pcon=False, check_symm=False)
+                ij_down = quantum_operator({'static': [['|+-', pair1_lst]]}, basis=basis,
+                                check_herm=False, check_pcon=False, check_symm=False)
+            if n == 1: # again, otherwise we already know this
+                mj_up = quantum_operator({'static': [['+-|', pair4_lst]]}, basis=basis,
+                                 check_herm=False, check_pcon=False, check_symm=False)
+                mj_down = quantum_operator({'static': [['|+-', pair4_lst]]}, basis=basis,
+                                 check_herm=False, check_pcon=False, check_symm=False)
+            # depends on n, so need to do every time
+            mn_up = quantum_operator({'static': [['+-|', pair2_lst]]}, basis=basis,
+                             check_herm=False, check_pcon=False, check_symm=False)
+            mn_down = quantum_operator({'static': [['|+-', pair2_lst]]}, basis=basis,
+                             check_herm=False, check_pcon=False, check_symm=False)
+            in_up = quantum_operator({'static': [['+-|', pair3_lst]]}, basis=basis,
+                             check_herm=False, check_pcon=False, check_symm=False)
+            in_down = quantum_operator({'static': [['|+-', pair3_lst]]}, basis=basis,
+                             check_herm=False, check_pcon=False, check_symm=False)
+
+            for vi, v in enumerate(vs):
+                pvs[vi] += ij_up.dot(mn_down.dot(v)) + ij_down.dot(mn_up.dot(v))
+                pvs[vi] -= in_up.dot(mj_down.dot(v)) + in_down.dot(mj_up.dot(v))
+            # print('Done with {} {} term in double sum'.format(m, n))
+    outs = np.zeros(len(vs), dtype=np.complex128)
+    for i, v in enumerate(vs):
+        outs[i] = np.vdot(v, pvs[i])/(2*L**2)
+    return outs
 
 
 if __name__ == '__main__':
@@ -403,47 +444,46 @@ if __name__ == '__main__':
     ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
     print(ks)
     # ks = np.arange(L) + 1.0
-    G = float(input('G: '))
     Nup = int(input('Nup: '))
     Ndown = int(input('Ndown: '))
-    sep = int(input('Pair separation: '))
+    # sep = int(input('Pair separation: '))
     basis = form_basis(2*L, Nup, Ndown)
 
-    h = ham_op_2(L, G, ks, basis)
-    e, v = h.eigsh(k=1, which='SA')
-    h0 = ham_op_2(L, 0, ks, basis)
-    e0, v0 = h0.eigsh(k=1, which='SA')
-    hn = ham_op_2(L, -1*G, ks, basis)
-    en, vn = hn.eigsh(k=1, which='SA')
+    Gs = np.array([-0.7, -0.65, -0.6, -0.55, -0.5, -0.45, -0.4])/L
+    vs = [None for G in Gs]
+    for i, G in enumerate(Gs):
+        hp = ham_op_2(L, G, ks, basis)
+        ep, vp = hp.eigsh(k=1, which='SA')
+        vs[i] = vp[:, 0]
 
     ls = np.arange(1, 2*L+1)
-    pcs0 = np.zeros(2*L)
-    pcs = np.zeros(2*L)
-    pcsn = np.zeros(2*L)
-    # l1 = 3
+    pcs = [np.zeros(2*L) for G in Gs]
+
     l1 = 1
     for i in range(2*L):
+        print('')
+        print('!!!!!!!!!!!!!!!!!!!!!!!')
+        print(i)
+        print('!!!!!!!!!!!!!!!!!!!!!!!')
+        print('')
         # l2 = i%(2*L) + 1
         l2 = i+1
-        pc = pairing_correlation(v[:,0], l1, l2, ks, basis, sep=sep)
-        pc0 = pairing_correlation(v0[:,0], l1, l2, ks, basis, sep=sep)
-        pcn = pairing_correlation(vn[:,0], l1, l2, ks, basis, sep=sep)
-        print('pc')
-        print(pc)
-        pcs[i] = np.abs(pc)**2
-        pcs0[i] = np.abs(pc0)**2
-        pcsn[i] = np.abs(pcn)**2
+        outs = pairing_correlation(vs, l1, l2, ks, basis)
+        print('L2: {}'.format(l2))
+        print(outs)
+        for j, o in enumerate(outs):
+            pcs[j][i] = o
 
-    # heatmap(pcs, vmin=0, vmax=0.07)
-    # heatmap(pcs, xticklabels=ls, yticklabels=ls)
+
     dens = .25*(Nup+Ndown)/L
-    plt.plot(np.abs(ls-l1), pcs, label='G = {}'.format(G))
-    plt.plot(np.abs(ls-l1), pcs0, label='G = 0')
-    plt.plot(np.abs(ls-l1), pcsn, label='G = {}'.format(-1*G))
+    for i, G in enumerate(Gs):
+        plt.plot(np.abs(ls-l1), pcs[i], label='G = {}'.format(G))
+
     plt.xlabel(r'$|a-b|$')
     plt.ylabel(r'$P_{ab}$')
+    # plt.legend()
+    plt.title(r'Pairing correlation, L = {}, N = {}'.format(
+              2*L, Nup + Ndown))
     plt.legend()
-    plt.title(r'Pair correlation, L = {}, N = {}, $\delta = ${}'.format(
-              2*L, Nup + Ndown, sep))
-    # plt.show()
-    plt.savefig('pairing_L{}N{}sep{}.png'.format(2*L, Nup+Ndown, sep))
+    plt.show()
+    # plt.savefig('pairing_L{}N{}seps.png'.format(2*L, Nup+Ndown, sep))
