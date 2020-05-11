@@ -375,8 +375,10 @@ def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):
 
 def eta(x, ks):
     return -2j*np.sum(ks*np.sin(ks*x))
-
-
+    # if x == 0:
+    #     return 0
+    # else:
+    #     return 1./np.abs(x)
 
 def pairing_correlation(vs, i, j, ks, basis):
 
@@ -425,8 +427,10 @@ def pairing_correlation(vs, i, j, ks, basis):
                              check_herm=False, check_pcon=False, check_symm=False)
 
             for vi, v in enumerate(vs):
-                pvs[vi] += ij_up.dot(mn_down.dot(v)) + ij_down.dot(mn_up.dot(v))
-                pvs[vi] -= in_up.dot(mj_down.dot(v)) + in_down.dot(mj_up.dot(v))
+                pvs[vi] += pf*(ij_up.dot(mn_down.dot(v)) + ij_down.dot(mn_up.dot(v))
+                               -(in_up.dot(mj_down.dot(v)) + in_down.dot(mj_up.dot(v))))x
+
+                # pvs[vi] += np.conjugate(pvs[vi])
             # print('Done with {} {} term in double sum'.format(m, n))
     outs = np.zeros(len(vs), dtype=np.complex128)
     for i, v in enumerate(vs):
@@ -449,18 +453,18 @@ if __name__ == '__main__':
     # sep = int(input('Pair separation: '))
     basis = form_basis(2*L, Nup, Ndown)
 
-    Gs = np.array([-0.7, -0.65, -0.6, -0.55, -0.5, -0.45, -0.4])/L
+    Gs = np.array([-0.5, -0.3, -0.1, 0, 0.1, 0.3, 0.5])/L
     vs = [None for G in Gs]
     for i, G in enumerate(Gs):
         hp = ham_op_2(L, G, ks, basis)
         ep, vp = hp.eigsh(k=1, which='SA')
         vs[i] = vp[:, 0]
 
-    ls = np.arange(1, 2*L+1)
-    pcs = [np.zeros(2*L) for G in Gs]
+    ls = np.arange(1, L+1)
+    pcs = [np.zeros(L) for G in Gs]
 
     l1 = 1
-    for i in range(2*L):
+    for i in range(L):
         print('')
         print('!!!!!!!!!!!!!!!!!!!!!!!')
         print(i)
@@ -480,10 +484,10 @@ if __name__ == '__main__':
         plt.plot(np.abs(ls-l1), pcs[i], label='G = {}'.format(G))
 
     plt.xlabel(r'$|a-b|$')
-    plt.ylabel(r'$P_{ab}$')
+    plt.ylabel(r'$P_{ab}^2$')
     # plt.legend()
     plt.title(r'Pairing correlation, L = {}, N = {}'.format(
               2*L, Nup + Ndown))
     plt.legend()
-    plt.show()
-    # plt.savefig('pairing_L{}N{}seps.png'.format(2*L, Nup+Ndown, sep))
+    # plt.show()
+    plt.savefig('pairing_L{}N{}.png'.format(2*L, Nup+Ndown))
