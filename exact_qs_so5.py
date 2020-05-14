@@ -428,8 +428,7 @@ def pairing_correlation(vs, i, j, ks, basis):
 
             for vi, v in enumerate(vs):
                 pvs[vi] += pf*(ij_up.dot(mn_down.dot(v)) + ij_down.dot(mn_up.dot(v))
-                               -(in_up.dot(mj_down.dot(v)) + in_down.dot(mj_up.dot(v))))x
-
+                               -(in_up.dot(mj_down.dot(v)) + in_down.dot(mj_up.dot(v))))
                 # pvs[vi] += np.conjugate(pvs[vi])
             # print('Done with {} {} term in double sum'.format(m, n))
     outs = np.zeros(len(vs), dtype=np.complex128)
@@ -440,17 +439,19 @@ def pairing_correlation(vs, i, j, ks, basis):
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
-    from matplotlib import rc
-    rc('font',**{'family':'sans-serif','sans-serif':['Helvetica']})
-    rc('text', usetex=True)
-    # from seaborn import heatmap
-    L = int(input('L: '))
+    import sys
+
+
+    # L = int(input('L: '))
+    L = int(sys.argv[1])
     ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
     print(ks)
     # ks = np.arange(L) + 1.0
-    Nup = int(input('Nup: '))
-    Ndown = int(input('Ndown: '))
+    # Nup = int(input('Nup: '))
+    # Ndown = int(input('Ndown: '))
     # sep = int(input('Pair separation: '))
+    Nup = int(sys.argv[2])
+    Ndown = int(sys.argv[3])
     basis = form_basis(2*L, Nup, Ndown)
 
     Gs = np.array([-0.5, -0.3, -0.1, 0, 0.1, 0.3, 0.5])/L
@@ -481,7 +482,7 @@ if __name__ == '__main__':
 
     dens = .25*(Nup+Ndown)/L
     for i, G in enumerate(Gs):
-        plt.plot(np.abs(ls-l1), pcs[i], label='G = {}'.format(G))
+        plt.plot(np.abs(ls-l1), pcs[i]**2, label='G = {}'.format(G))
 
     plt.xlabel(r'$|a-b|$')
     plt.ylabel(r'$P_{ab}^2$')
