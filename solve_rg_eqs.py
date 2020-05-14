@@ -417,8 +417,10 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
             s -= ds
     # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
-    sol = find_root_multithread(vars, kc, g, dims, max(s, 10**-4),
+    sol = find_root_multithread(vars, kc, g, dims, 0, #max(s, 10**-4),
                                 max_steps=MAX_STEPS)
+    vars = sol.x
+    er = max(abs(rgEqs(vars, kc, g, dims)))
     return vars, er
 
 
@@ -446,7 +448,7 @@ def calculate_energies(varss, gs, ks, Ne):
         R = ioms(ces, g, ks)
         Rs[i, :] = np.real(R)
         log(R)
-        energies[i] = 2*np.sum(ks*np.real(R))/(1 - g*np.sum(ks))
+        energies[i] = np.sum(ks*np.real(R))# *2/(1 - g*np.sum(ks))
         log(energies[i])
     return energies, Rs
 
@@ -683,6 +685,11 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('omegas - k:')
                 log(cws - k_full[np.arange(Nw)//2])
             elif i % skip == 0 or g == gf:
+                if g == gf:
+                    log('wwwwwwwwwww')
+                    log('')
+                    log('!!!!!!!!')
+                    log('Last g!')
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
@@ -750,7 +757,7 @@ if __name__ == '__main__':
 
     N = Ne + Nw
 
-    dg = 0.002/L
+    dg = 0.01/L
     g0 = .1*dg/L
     imk = dg
     imv = .1*g0/N
@@ -804,11 +811,11 @@ if __name__ == '__main__':
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
-        ho = ham_op(L, Gf, ks, basis, rescale_g=True)
-        ho2 = ham_op_2(L, Gf, ks, basis)
+        ho = ham_op(L, gf, ks, basis, rescale_g=False)
+        # ho2 = ham_op_2(L, Gf, ks, basis)
         # e, v = find_min_ev(ho, L, basis, n=min((dimH-1, 100)))
         e, v = ho.eigsh(k=10, which='SA')
-        e2, v2 = ho2.eigsh(k=1, which='SA')
+        # e2, v2 = ho2.eigsh(k=1, which='SA')
         # e, v = ho.eigh()
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
@@ -816,5 +823,5 @@ if __name__ == '__main__':
         print('This is the {}th energy'.format(np.argmin(diffs)))
         print('True low energies:')
         print(e[:10])
-        print('Other energy')
-        print(e2[0])
+        #print('Other energy')
+        # print(e2[0])
