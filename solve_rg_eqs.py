@@ -446,7 +446,7 @@ def calculate_energies(varss, gs, ks, Ne):
         R = ioms(ces, g, ks)
         Rs[i, :] = np.real(R)
         log(R)
-        energies[i] = np.sum(ks*np.real(R)) # /(1 - g*np.sum(ks))
+        energies[i] = 2*np.sum(ks*np.real(R))/(1 - g*np.sum(ks))
         log(energies[i])
     return energies, Rs
 
@@ -750,7 +750,7 @@ if __name__ == '__main__':
 
     N = Ne + Nw
 
-    dg = 0.005/L
+    dg = 0.002/L
     g0 = .1*dg/L
     imk = dg
     imv = .1*g0/N
@@ -800,13 +800,15 @@ if __name__ == '__main__':
     print('Hilbert space dimension: {}'.format(dimH))
     keep_going = input('Input 1 to diagonalize: ')
     if keep_going == '1':
-        from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
+        from exact_qs_so5 import iom_dict, form_basis, ham_op, ham_op_2
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
-        ho = ham_op(L, gf, ks, basis, rescale_g=False)
+        ho = ham_op(L, Gf, ks, basis, rescale_g=True)
+        ho2 = ham_op_2(L, Gf, ks, basis)
         # e, v = find_min_ev(ho, L, basis, n=min((dimH-1, 100)))
         e, v = ho.eigsh(k=10, which='SA')
+        e2, v2 = ho2.eigsh(k=1, which='SA')
         # e, v = ho.eigh()
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
@@ -814,3 +816,5 @@ if __name__ == '__main__':
         print('This is the {}th energy'.format(np.argmin(diffs)))
         print('True low energies:')
         print(e[:10])
+        print('Other energy')
+        print(e2[0])

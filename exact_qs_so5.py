@@ -62,14 +62,13 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
     ppairing = [] # spin 1 pairing
     zpairing = [] # spin 0 pairing
     samesame = [] # n_k n_k' interaction
-    dens = []
     spm = [] # spin spin interaction
     smp = []
     for k1 in range(L):
         p_k1 = L + k1 # index of +k fermions
         m_k1 = L - (k1+1) # index of -k fermions
 
-        all_k += [[0.5*k[k1], p_k1], [0.5*k[k1], m_k1]]
+        all_k += [[k[k1], p_k1], [k[k1], m_k1]]
 
         for k2 in range(L):
             Zkk = G*k[k1]*k[k2]
@@ -84,13 +83,13 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
             p_k2 = L + k2
             m_k2 = L - (k2+1)
             ppairing += [
-                         [2*Xkk, p_k1, m_k1, m_k2, p_k2]
+                         [Xkk, p_k1, m_k1, m_k2, p_k2]
                         ]
             zpairing += [
-                         [Xkk, p_k1, p_k2, m_k1, m_k2],
-                         [Xkk, m_k1, m_k2, p_k1, p_k2],
-                         [-1*Xkk, p_k1, m_k2, m_k1, p_k2],
-                         [-1*Xkk, m_k1, p_k2, p_k1, m_k2]
+                         [.5*Xkk, p_k1, p_k2, m_k1, m_k2],
+                         [.5*Xkk, m_k1, m_k2, p_k1, p_k2],
+                         [-.5*Xkk, p_k1, m_k2, m_k1, p_k2],
+                         [-.5*Xkk, m_k1, p_k2, p_k1, m_k2]
                         ]
             s_c = 0.5*Xskk
             # s_c = Xskk*g_spin
@@ -101,18 +100,11 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
                     [s_c, m_k1, m_k2, m_k1, m_k2]
                     ]
             d_c = 0.5*Zkk
-            if k1 != k2:
-                samesame += [[0.5*d_c, p_k1, p_k2],
-                             [0.5*d_c, p_k1, m_k2],
-                             [0.5*d_c, m_k1, p_k2],
-                             [0.5*d_c, m_k1, m_k2]
-                            ]
-                dens += [
-                         [-d_c, p_k1],
-                         [-d_c, m_k1],
-                         [-d_c, p_k2],
-                         [-d_c, m_k2]
-                        ]
+            samesame += [[d_c, p_k1, p_k2],
+                         [d_c, p_k1, m_k2],
+                         [d_c, m_k1, p_k2],
+                         [d_c, m_k1, m_k2]
+                         ]
     if no_kin:
         static = [
                 ['++--|', ppairing],
@@ -122,14 +114,12 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
                 ]
     else:
         static = [['n|', all_k], ['|n', all_k],
-                ['++--|', ppairing], # ['--++|', ppairing],
-                ['+-|+-', zpairing], # ['-+|-+', zpairing],
-                ['|++--', ppairing], # ['|--++', ppairing],
-                # ['+-|-+', spm], ['-+|+-', spm],
-                # ['nn|', samesame], # the up/down density density stuff cancels
-                # ['|nn', samesame]
-                # ['n|', dens],
-                # ['|n', dens]
+                ['++--|', ppairing], ['--++|', ppairing],
+                ['+-|+-', zpairing], ['-+|-+', zpairing],
+                ['|++--', ppairing], ['|--++', ppairing],
+                ['+-|-+', spm], ['-+|+-', spm],
+                ['nn|', samesame], # the up/down density density stuff cancels
+                ['|nn', samesame]
                 ]
 
     return {'static': static}
@@ -323,7 +313,10 @@ def ham_op(L, G, ks, basis, rescale_g=False, dtype=np.float64):
     factor = 1
     if rescale_g:
         g = G/(1+G*np.sum(ks))
+
         print('g = {}'.format(g))
+        Gis = g/(1-g*np.sum(ks))
+        print('G = {}'.format(Gis))
         factor = 2/(1-g*np.sum(ks))
     else:
         g = G
@@ -428,7 +421,7 @@ def pairing_correlation(vs, i, j, ks, basis):
 
             for vi, v in enumerate(vs):
                 pvs[vi] += pf*(ij_up.dot(mn_down.dot(v)) + ij_down.dot(mn_up.dot(v))
-                               -(in_up.dot(mj_down.dot(v)) + in_down.dot(mj_up.dot(v))))x
+                               -(in_up.dot(mj_down.dot(v)) + in_down.dot(mj_up.dot(v))))
 
                 # pvs[vi] += np.conjugate(pvs[vi])
             # print('Done with {} {} term in double sum'.format(m, n))
@@ -450,10 +443,12 @@ if __name__ == '__main__':
     # ks = np.arange(L) + 1.0
     Nup = int(input('Nup: '))
     Ndown = int(input('Ndown: '))
+    # G = float(input('G: '))
     # sep = int(input('Pair separation: '))
     basis = form_basis(2*L, Nup, Ndown)
 
-    Gs = np.array([-0.5, -0.3, -0.1, 0, 0.1, 0.3, 0.5])/L
+    Gs = np.array([-2, -1, -0.5, 0, 0.5, 1, 2])/L
+
     vs = [None for G in Gs]
     for i, G in enumerate(Gs):
         hp = ham_op_2(L, G, ks, basis)
@@ -481,10 +476,10 @@ if __name__ == '__main__':
 
     dens = .25*(Nup+Ndown)/L
     for i, G in enumerate(Gs):
-        plt.plot(np.abs(ls-l1), pcs[i], label='G = {}'.format(G))
+        plt.plot(np.abs(ls-l1+1), pcs[i], label='G = {}'.format(G))
 
     plt.xlabel(r'$|a-b|$')
-    plt.ylabel(r'$P_{ab}^2$')
+    plt.ylabel(r'$P_{ab}$')
     # plt.legend()
     plt.title(r'Pairing correlation, L = {}, N = {}'.format(
               2*L, Nup + Ndown))
