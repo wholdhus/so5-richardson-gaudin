@@ -752,6 +752,10 @@ if __name__ == '__main__':
     L = int(input('Length: '))
     Ne = int(input('Nup: '))
     Nw = int(input('Ndown: '))
+    print('Predicted Gc: ')
+    Gc = 8./((L+1)*(2*L+Ne+Nw))
+    print(Gc)
+
     Gf = float(input('G: '))
     JOBS = int(input('Number of concurrent jobs to run: '))
     N = Ne + Nw
@@ -783,7 +787,7 @@ if __name__ == '__main__':
     print(rge)
 
     dimH = binom(2*L, Ne)*binom(2*L, Nw)
-    G = output_df['G']
+    G = -1*output_df['G']
     E = output_df['energy']
     dE = np.gradient(E, G)
     d2E = np.gradient(dE, G)
@@ -791,6 +795,8 @@ if __name__ == '__main__':
     plt.figure(figsize=(12,8))
     plt.subplot(2,2,1)
     plt.scatter(G, E)
+    if np.max(-1*G) > Gc:
+        plt.axvline(-1*Gc)
     plt.title('Energy')
     plt.subplot(2,2,2)
     plt.scatter(G[5:-5], dE[5:-5])
@@ -810,15 +816,11 @@ if __name__ == '__main__':
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
-        ho = ham_op(L, Gf, ks, basis)
-        ho2 = ham_op_2(L, Gf, ks, basis)
-        e, v = ho.eigsh(k=10, which='SA')
-        e2, v2 = ho2.eigsh(k=1, which='SA')
+        # ho = ham_op(L, Gf, ks, basis)
+        ho = ham_op_2(L, Gf, ks, basis)
+        # e, v = ho.eigsh(k=10, which='SA')
+        e, v = ho2.eigsh(k=10, which='SA')
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
         print(min(diffs))
         print('This is the {}th energy'.format(np.argmin(diffs)))
-        print('True low energies:')
-        print(e[:10])
-        print('Other energy')
-        print(e2[0])

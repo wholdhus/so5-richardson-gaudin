@@ -55,6 +55,7 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
         no_kin=True # easier to input this.
         G = 1
         print('Zero k.e. hamiltonian')
+    G *= -1 # woops i had some sign ambiguities!
     # k should include positive and negative values
     all_k = []
     ppairing = [] # spin 1 pairing
@@ -68,7 +69,7 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
         all_k += [[k[k1], p_k1], [k[k1], m_k1]]
 
         for k2 in range(L):
-            Zkk = -1*G*k[k1]*k[k2]
+            Zkk = G*k[k1]*k[k2]
             Xkk = Zkk
             Xskk = Zkk
             Xckk = Zkk
