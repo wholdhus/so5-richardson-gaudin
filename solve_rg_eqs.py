@@ -86,10 +86,10 @@ def pack_vars(ces, cws):
 
 
 def G_to_g(G, k):
-    return G/(1+G*np.sum(k))
+    return G/(1-G*np.sum(k))
 
 def g_to_G(g, k):
-    return g/(1-g*np.sum(k))
+    return g/(1+g*np.sum(k))
 
 
 def rgEqs(vars, k, g, dims):
@@ -417,8 +417,10 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
             s -= ds
     # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
-    sol = find_root_multithread(vars, kc, g, dims, max(s, 10**-4),
+    sol = find_root_multithread(vars, kc, g, dims, 0, #max(s, 10**-4),
                                 max_steps=MAX_STEPS)
+    vars = sol.x
+    er = max(abs(rgEqs(vars, kc, g, dims)))
     return vars, er
 
 
@@ -429,7 +431,6 @@ def ioms(es, g, ks, extra_bits=False):
         R_r = g*np.sum(reZ(k, 0, np.real(es), np.imag(es)))
         R_i = g*np.sum(imZ(k, 0, np.real(es), np.imag(es)))
         R[i] = R_r + 1j*R_i
-        # R[i] = g*np.sum(rationalZ(k, es))
         if extra_bits:
             otherks = ks[np.arange(L) != i]
             Zkk = rationalZ(k, otherks)
@@ -446,7 +447,8 @@ def calculate_energies(varss, gs, ks, Ne):
         R = ioms(ces, g, ks)
         Rs[i, :] = np.real(R)
         log(R)
-        energies[i] = np.sum(ks*np.real(R)) # /(1 - g*np.sum(ks))
+        const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
+        energies[i] = np.sum(ks*np.real(R))*2/(1 + g*np.sum(ks)) - const
         log(energies[i])
     return energies, Rs
 
@@ -683,6 +685,11 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('omegas - k:')
                 log(cws - k_full[np.arange(Nw)//2])
             elif i % skip == 0 or g == gf:
+                if g == gf:
+                    log('wwwwwwwwwww')
+                    log('')
+                    log('!!!!!!!!')
+                    log('Last g!')
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
@@ -745,12 +752,15 @@ if __name__ == '__main__':
     L = int(input('Length: '))
     Ne = int(input('Nup: '))
     Nw = int(input('Ndown: '))
+    print('Predicted Gc: ')
+    Gc = 8./((L+1)*(2*L+Ne+Nw))
+    print(Gc)
+
     Gf = float(input('G: '))
     JOBS = int(input('Number of concurrent jobs to run: '))
-
     N = Ne + Nw
 
-    dg = 0.005/L
+    dg = 0.01/L
     g0 = .1*dg/L
     imk = dg
     imv = .1*g0/N
@@ -777,7 +787,7 @@ if __name__ == '__main__':
     print(rge)
 
     dimH = binom(2*L, Ne)*binom(2*L, Nw)
-    G = output_df['G']
+    G = -1*output_df['G']
     E = output_df['energy']
     dE = np.gradient(E, G)
     d2E = np.gradient(dE, G)
@@ -785,6 +795,8 @@ if __name__ == '__main__':
     plt.figure(figsize=(12,8))
     plt.subplot(2,2,1)
     plt.scatter(G, E)
+    if np.max(-1*G) > Gc:
+        plt.axvline(-1*Gc)
     plt.title('Energy')
     plt.subplot(2,2,2)
     plt.scatter(G[5:-5], dE[5:-5])
@@ -800,17 +812,15 @@ if __name__ == '__main__':
     print('Hilbert space dimension: {}'.format(dimH))
     keep_going = input('Input 1 to diagonalize: ')
     if keep_going == '1':
-        from exact_qs_so5 import iom_dict, form_basis, ham_op, find_min_ev
+        from exact_qs_so5 import iom_dict, form_basis, ham_op, ham_op_2
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 
-        ho = ham_op(L, gf, ks, basis, rescale_g=False)
-        # e, v = find_min_ev(ho, L, basis, n=min((dimH-1, 100)))
-        e, v = ho.eigsh(k=10, which='SA')
-        # e, v = ho.eigh()
+        # ho = ham_op(L, Gf, ks, basis)
+        ho = ham_op_2(L, Gf, ks, basis)
+        # e, v = ho.eigsh(k=10, which='SA')
+        e, v = ho2.eigsh(k=10, which='SA')
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
         print(min(diffs))
         print('This is the {}th energy'.format(np.argmin(diffs)))
-        print('True low energies:')
-        print(e[:10])
