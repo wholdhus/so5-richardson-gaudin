@@ -68,7 +68,7 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
         all_k += [[k[k1], p_k1], [k[k1], m_k1]]
 
         for k2 in range(L):
-            Zkk = G*k[k1]*k[k2]
+            Zkk = -1*G*k[k1]*k[k2]
             Xkk = Zkk
             Xskk = Zkk
             Xckk = Zkk
@@ -137,7 +137,7 @@ def iom_dict(L, G, k, k1=0, mult=1, kin=1, g_spin=1, g_dens=1):
     all_k = [[0.5*mult, p_k1], [0.5*mult, m_k1]]
     for k2 in range(L):
         if k2 != k1:
-            Zkk = mult*G*k[k2]*k[k1]/(k[k1]-k[k2])
+            Zkk = mult*G*k[k2]*k[k1]/(k[k2]-k[k1])
             p_k2 = L + k2 # index of +k fermions
             m_k2 = L - (k2+1) # index of -k fermions
             ppairing += [
@@ -308,8 +308,8 @@ def make_plots():
 
 def ham_op(L, G, ks, basis, dtype=np.float64):
 
-    g = G/(1+G*np.sum(ks))
-    factor = 2/(1-g*np.sum(ks))
+    g = G/(1-G*np.sum(ks))
+    factor = 2/(1+g*np.sum(ks))
 
     for i in range(L):
         cd = casimir_dict(L, i, factor = G*ks[i]**2)
@@ -317,10 +317,10 @@ def ham_op(L, G, ks, basis, dtype=np.float64):
         id = iom_dict(L, g, ks, k1=i, mult=ks[i]*factor, kin=1)
         if i == 0:
             h = quantum_operator(id, basis=basis, dtype=dtype)
-            h += co
+            h -= co
         else:
             h += quantum_operator(id, basis=basis, dtype=dtype)
-            h += co
+            h -= co
     return h
 
 def ham_op_2(L, G, ks, basis, no_kin=False):

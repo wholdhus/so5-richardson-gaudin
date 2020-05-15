@@ -86,10 +86,10 @@ def pack_vars(ces, cws):
 
 
 def G_to_g(G, k):
-    return G/(1+G*np.sum(k))
+    return G/(1-G*np.sum(k))
 
 def g_to_G(g, k):
-    return g/(1-g*np.sum(k))
+    return g/(1+g*np.sum(k))
 
 
 def rgEqs(vars, k, g, dims):
@@ -431,7 +431,6 @@ def ioms(es, g, ks, extra_bits=False):
         R_r = g*np.sum(reZ(k, 0, np.real(es), np.imag(es)))
         R_i = g*np.sum(imZ(k, 0, np.real(es), np.imag(es)))
         R[i] = R_r + 1j*R_i
-        # R[i] = g*np.sum(rationalZ(k, es))
         if extra_bits:
             otherks = ks[np.arange(L) != i]
             Zkk = rationalZ(k, otherks)
@@ -448,7 +447,8 @@ def calculate_energies(varss, gs, ks, Ne):
         R = ioms(ces, g, ks)
         Rs[i, :] = np.real(R)
         log(R)
-        energies[i] = np.sum(ks*np.real(R))*2/(1 - g*np.sum(ks))
+        const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
+        energies[i] = np.sum(ks*np.real(R))*2/(1 + g*np.sum(ks)) - const
         log(energies[i])
     return energies, Rs
 
@@ -754,7 +754,6 @@ if __name__ == '__main__':
     Nw = int(input('Ndown: '))
     Gf = float(input('G: '))
     JOBS = int(input('Number of concurrent jobs to run: '))
-
     N = Ne + Nw
 
     dg = 0.01/L
