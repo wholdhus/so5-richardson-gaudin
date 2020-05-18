@@ -16,7 +16,7 @@ MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
 JOBS = CPUS
-MAX_STEPS = 100*JOBS
+MAX_STEPS = 100
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -370,7 +370,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
         sol = sols[np.argmin(ers)]
         vars = sol.x
 
-        tries += JOBS
+        tries += 1
     # if not use_k_guess:
     #     # It's more important that I see how my initial guess performed here.
     #     log('Solution - initial guess')
@@ -417,7 +417,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
             s -= ds
     # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
-    sol = find_root_multithread(vars, kc, g, dims, 0, #max(s, 10**-4),
+    sol = find_root_multithread(vars, kc, g, dims, 0,
                                 max_steps=MAX_STEPS)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
@@ -510,140 +510,16 @@ def bootstrap_g0(dims, g0, kc,
 
     return sol
 
-
-def solve_rgEqs_1(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                  imscale_v=0.001):
-    L, Ne, Nw = dims
-    N = Ne + Nw
-    g1 = 2*dg * np.sign(gf)
-    if gf > g1:
-        g1s = np.arange(g0, g1, 0.5*dg)
-        g2s = np.append(np.arange(g1, gf, dg), gf)
-    elif gf < g1:
-        g1s = -1*np.linspace(g0, -1*g1, 0.5*dg)
-        g2s = np.append(-1*np.arange(-1*g1, -1*gf, dg), gf)
-    else:
-        print('Woops: abs(gf) < abs(g1)')
-        return
-    log('g1s')
-    log(g1s)
-    log('g2s')
-    log(g2s)
-
-    kim = imscale_k*(-1)**np.arange(L)
-    kc = np.concatenate((k, kim))
-    vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
-    varss = np.zeros((len(vars), len(g2s)))
-    log('Initial guesses:')
-    es, ws = unpack_vars(vars, Ne, Nw)
-    if Nw%2==1:
-        ws[-1] = 0
-    print(es)
-    print(ws)
-
-    vars = pack_vars(es, ws)
-    print('')
-    print('Incrementing g with complex k from {} up to {}'.format(g1s[0], g1))
-    for i, g in enumerate(g1s):
-        # log('g = {}'.format(g))
-        if i == 0:
-            print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
-            sol = bootstrap_g0(dims, g0, kc, imscale_v)
-        else:
-            sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=MAX_STEPS,
-                                        use_k_guess=True)
-        vars = sol.x
-        er = max(abs(rgEqs(vars, kc, g, dims)))
-        if er > 0.001 and i > 1:
-            print('This is too bad')
-            return
-        ces, cws = unpack_vars(vars, Ne, Nw)
-        if i == 0:
-            log('Status: {}'.format(sol.status))
-            log('Msg: {}'.format(sol.message))
-            log('Iterations: {}'.format(sol.nfev))
-            log('g = {}'.format(g))
-            log('er: {}'.format(er))
-            log('Solution vector:')
-            log(vars)
-            k_full = k + 1j*kim
-            log('es - k:')
-            log(ces - k_full[np.arange(Ne)//2])
-            log('omegas - k:')
-            log(cws - k_full[np.arange(Nw)//2])
-
-    print('')
-    print('Incrementing k to be real')
-    vars, er = increment_im_k(vars, dims, g, k, kim, steps=10*L)
-    print('')
-    kc = np.concatenate((k, np.zeros(L)))
-    print('Now doing the rest of g steps')
-    i = 0
-    keep_going = True
-    while i < len(g2s) and keep_going:
-        g = g2s[i]
-        try:
-            # The assumptions made in "forcing" ground state
-            # probably don't hold for high coupling
-            sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=Ne, force_gs=False)
-            vars = sol.x
-            er = max(abs(rgEqs(vars, kc, g, dims)))
-            if er > 10**-9:
-                log('Highish errors:')
-                log('g = {}'.format(g))
-                log(er)
-            varss[:, i] = vars
-            i += 1
-            log('Finished with g = {}'.format(g))
-        except Exception as e:
-            print('Error during g incrementing')
-            print(e)
-            keep_going = False
-
-    if not keep_going:
-        print('Terminated at g = {}'.format(g))
-        g2s = g2s[:i-1]
-        gf = g2s[-1]
-        varss = varss[:, :i-1]
-    print('')
-    print('Final error:')
-    print(er)
-
-    ces, cws = unpack_vars(vars, Ne, Nw)
-    output_df = pandas.DataFrame({})
-    output_df['g'] = g2s
-    output_df['G'] = g_to_G(g2s, k)
-    for n in range(Ne):
-        output_df['Re(e_{})'.format(n)] = varss[n, :]
-        output_df['Im(e_{})'.format(n)] = varss[n+Ne, :]
-        output_df['Re(omega_{})'.format(n)] = varss[n+2*Ne, :]
-        output_df['Im(omega_{})'.format(n)] = varss[n+3*Ne, :]
-    output_df['energy'], Rs = calculate_energies(varss, g2s, k, Ne)
-
-    return ces, cws, output_df
-
-
-def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                  imscale_v=0.001, skip=4, increment_G=False):
+def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
+                  imscale_v=0.001, skip=4):
     L, Ne, Nw = dims
     N = Ne + Nw
 
-    Gf = g_to_G(gf, k)
-    if increment_G:
-        print('Incrementing G, not g')
-        G0 = g0*np.sign(Gf)
-        Gs = np.linspace(G0, Gf, int(np.abs(Gf/dg)))
-        gs = G_to_g(Gs, k)
-    else:
-        print('Incrementing g, not G')
-        gs = np.linspace(g0, gf, int(np.abs(gf/dg)))
-        Gs = g_to_G(gs, k)
-    log('gs')
-    log(gs)
-    log('Gs')
-    log(Gs)
+    gf = G_to_g(Gf, k)
+
+    gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
+    Gs = g_to_G(gs, k)
+
 
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
@@ -660,14 +536,14 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     while i<len(gs) and keep_going:
         g = gs[i]
+        if i == 0:
+            print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
+            sol = bootstrap_g0(dims, g0, kc, imscale_v)
+        else:
+            sol = find_root_multithread(vars, kc, g, dims, imscale_v,
+                                        max_steps=10, # if we loose it here, we don't get it back usually
+                                        use_k_guess=True)
         try:
-            if i == 0:
-                print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
-                sol = bootstrap_g0(dims, g0, kc, imscale_v)
-            else:
-                sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                            max_steps=MAX_STEPS,
-                                            use_k_guess=True)
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
             if er > 0.001 and i > 1:
@@ -687,32 +563,26 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log(ces - k_full[np.arange(Ne)//2])
                 log('omegas - k:')
                 log(cws - k_full[np.arange(Nw)//2])
-            elif i % skip == 0 or g == gf:
-                if g == gf:
-                    log('wwwwwwwwwww')
-                    log('')
-                    log('!!!!!!!!')
-                    log('Last g!')
+            elif i % skip == 0 or g == gf and i > 0:
                 log('Removing im(k) at g = {}'.format(g))
-                try:
-                    vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                                steps=10*L,
-                                                max_steps=10*JOBS)
-                    varss += [vars_r]
-                    es, ws = unpack_vars(vars_r, Ne, Nw)
-                    print('Variables after removing im(k)')
-                    print(es)
-                    print(ws)
-                    gss += [g]
-                    log('Stored values at {}'.format(g))
-                except:
-                    log('Took more than {} steps to remove im(k)'.format(10*JOBS))
+                vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
+                                            steps=10*L,
+                                            max_steps=10*JOBS)
+                varss += [vars_r]
+                es, ws = unpack_vars(vars_r, Ne, Nw)
+                print('Variables after removing im(k)')
+                print(es)
+                print(ws)
+                gss += [g]
+                log('Stored values at {}'.format(g))
+
             i += 1
             log('Finished with g = {}'.format(g))
         except Exception as e:
             print('Error during g incrementing')
             print(e)
             keep_going = False
+    varss = np.array(varss)
     if not keep_going:
         print('Terminated at g = {}'.format(g))
         gs = gs[:i-1]
@@ -722,9 +592,8 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print('Final error:')
     print(er)
 
-    varss = np.array(varss)
     gss = np.array(gss)
-    print(np.shape(varss))
+    # print(np.shape(varss))
 
     output_df = pandas.DataFrame({})
     output_df['g'] = gss
@@ -747,6 +616,37 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     # ces, cws = unpack_vars(varss[:, -1], Ne, Nw)
     return output_df
 
+
+def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
+                     imscale_v=0.001, skip=4):
+    gf = G_to_g(Gf, k)
+    if np.sign(gf) == np.sign(Gf):
+        # We are doing fine, no problems
+        output_df = solve_rgEqs(dims, Gf, k, dg=dg, g0=g0, imscale_k=imscale_k,
+                                imscale_v=imscale_v, skip=skip)
+    else:
+        # We need to do things twice
+        Gstar = 1/np.sum(k)
+        # G1 = g_to_G(1.21, k)
+        G1 = 0.9 * Gstar
+        print('First going up to G* = {}'.format(G1))
+
+        output_df_1 = solve_rgEqs(dims, G1, k, dg=dg, g0=g0, imscale_k=imscale_k,
+                                imscale_v=imscale_v, skip=skip)
+        G2 = 1.1 * Gstar
+        print('Now going from about infinity to G = {}'.format(G2))
+        output_df_2 = solve_rgEqs(dims, G2, k, dg=dg, g0=g0, imscale_k=imscale_k,
+                                  imscale_v=imscale_v, skip=skip)
+        print('Number of rows before!')
+        print(len(output_df_1))
+        print('Number of rows in the next guy!')
+        print(len(output_df_2))
+
+        print('Number after!')
+        output_df = output_df_1.append(output_df_2)
+        print(len(output_df))
+
+    return output_df
 
 
 if __name__ == '__main__':
@@ -772,11 +672,11 @@ if __name__ == '__main__':
     dims = (L, Ne, Nw)
 
     ks = (1.0*np.arange(L) + 1.0)/L
-    gf = G_to_g(Gf, ks)
-    print('Input G corresponds to g = {}'.format(gf))
+    # gf = G_to_g(Gf, ks)
+    # print('Input G corresponds to g = {}'.format(gf))
 
-    output_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                              imscale_v=imv, skip=4, increment_G=True)
+    output_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
+                              imscale_v=imv, skip=4*L)
     print('')
     print('Solution found:')
 
@@ -784,14 +684,22 @@ if __name__ == '__main__':
 
 
     Gf_actual = np.array(output_df['G'])[-1]
+    # Gf_actual = Gf
     rge = np.array(output_df['energy'])[-1]
 
     print('Energy: ')
     print(rge)
 
     dimH = binom(2*L, Ne)*binom(2*L, Nw)
-    G = -1*output_df['G']
-    E = output_df['energy']
+    G = np.array(output_df['G'])
+    E = np.array(output_df['energy'])
+    if Gf_actual > 0:
+        good_inds = np.logical_and(G <= Gf, G >= 0)
+    else:
+        good_inds = np.logical_and(G >= Gf, G <= 0)
+    print(good_inds)
+    G = G[good_inds]
+    E = E[good_inds]
     dE = np.gradient(E, G)
     d2E = np.gradient(dE, G)
     d3E = np.gradient(d2E, G)
@@ -820,7 +728,7 @@ if __name__ == '__main__':
         basis = form_basis(2*L, Ne, Nw)
 
         # ho = ham_op(L, Gf, ks, basis)
-        ho = ham_op_2(L, Gf, ks, basis)
+        ho = ham_op_2(L, Gf_actual, ks, basis)
         # e, v = ho.eigsh(k=10, which='SA')
         e, v = ho.eigsh(k=10, which='SA')
         print('Smallest distance from ED result for GS energy:')

@@ -54,10 +54,8 @@ print('')
 
 dims = (L, Ne, Nw)
 
-increment_G = L < 10
-
 vars_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                        imscale_v=imv, skip=4, increment_G=increment_G)
+                        imscale_v=imv, skip=4)
 
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'solutions_full_{}_{}_{}.csv'.format(L, N, gf))
