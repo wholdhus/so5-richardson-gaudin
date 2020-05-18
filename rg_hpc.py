@@ -23,13 +23,8 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-# if len(sys.argv) == 5:
-if 'dog' == 'cat':
-    dg = float(sys.argv[4])
-    g0 = 0.001*dg
-else:
-    dg = 0.001/L
-    g0 = .1*dg/L
+dg = 0.001/L
+g0 = .1*dg
 imk = dg
 imv = .01*g0
 
@@ -55,15 +50,11 @@ print('')
 
 dims = (L, Ne, Nw)
 
-# if L > Ne + Nw:
-if 'cog' == 'log':
-    print('Below half filling!')
-    es, ws, vars_df = solve_rgEqs_1(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                                    imscale_v=imv)
-else:
-    # print('Above half filling!')
-    vars_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                                    imscale_v=imv, skip=4)
+# increment_G = L < 10
+increment_G = True
+
+vars_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
+                        imscale_v=imv, skip=4*L, increment_G=increment_G)
 
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'good_solutions/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))

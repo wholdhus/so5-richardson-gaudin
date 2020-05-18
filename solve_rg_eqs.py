@@ -626,21 +626,26 @@ def solve_rgEqs_1(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
 
 def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                  imscale_v=0.001, skip=4):
+                  imscale_v=0.001, skip=4, increment_G=False):
     L, Ne, Nw = dims
     N = Ne + Nw
 
     Gf = g_to_G(gf, k)
-    if gf > 0:
-        gs = np.append(np.arange(g0, gf, dg), gf)
-        # Gs = np.append(np.arange(g0, Gf, dg), Gf)
-        # gs =  G_to_g(Gs, k) # so evenly spaced in G
+    if increment_G:
+        print('Incrementing G, not g')
+        G0 = g0*np.sign(Gf)
+        Gs = np.linspace(G0, Gf, int(np.abs(Gf/dg)))
+        gs = G_to_g(Gs, k)
+    else:
+        print('Incrementing g, not G')
+        gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
         Gs = g_to_G(gs, k)
-    elif gf < 0:
-        gs = np.append(-1*np.arange(-1*g0, -1*gf, dg), gf)
-        Gs = g_to_G(gs, k)
-    log('gs')
-    log(gs)
+    if np.argmax(np.abs(Gs)) != len(Gs):
+        print('Warning! G does some weird spiky stuff!')
+        print(Gs)
+    if np.sign(gs[0]) != np.sign(gs[-1]):
+        print('Woah! g flips sign!')
+        print(gs)
 
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
@@ -773,7 +778,7 @@ if __name__ == '__main__':
     print('Input G corresponds to g = {}'.format(gf))
 
     output_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                              imscale_v=imv, skip=4)
+                              imscale_v=imv, skip=4, increment_G=True)
     print('')
     print('Solution found:')
 
@@ -819,7 +824,7 @@ if __name__ == '__main__':
         # ho = ham_op(L, Gf, ks, basis)
         ho = ham_op_2(L, Gf, ks, basis)
         # e, v = ho.eigsh(k=10, which='SA')
-        e, v = ho2.eigsh(k=10, which='SA')
+        e, v = ho.eigsh(k=10, which='SA')
         print('Smallest distance from ED result for GS energy:')
         diffs = abs(e-rge)
         print(min(diffs))
