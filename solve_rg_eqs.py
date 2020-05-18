@@ -575,7 +575,7 @@ def solve_rgEqs_1(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     print('')
     print('Incrementing k to be real')
-    vars, er = increment_im_k(vars, dims, g, k, kim, steps=10*L)
+    vars, er = increment_im_k(vars, dims, g, k, kim, steps=min(10*L, 1000))
     print('')
     kc = np.concatenate((k, np.zeros(L)))
     print('Now doing the rest of g steps')
@@ -693,7 +693,7 @@ def solve_rgEqs_2(dims, gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                                steps=10*L,
+                                                steps=min(10*L, 1000),
                                                 max_steps=10*JOBS)
                     varss += [vars_r]
                     es, ws = unpack_vars(vars_r, Ne, Nw)

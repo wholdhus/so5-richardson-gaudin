@@ -23,14 +23,15 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-if len(sys.argv) == 5:
+# if len(sys.argv) == 5:
+if 'dog' == 'cat':
     dg = float(sys.argv[4])
     g0 = 0.001*dg
 else:
-    dg = 0.005/L
+    dg = 0.001/L
     g0 = .1*dg/L
 imk = dg
-imv = .1*g0/N
+imv = .01*g0
 
 ks = (1.0*np.arange(L) + 1.0)/L
 
@@ -54,17 +55,18 @@ print('')
 
 dims = (L, Ne, Nw)
 
-if L > Ne + Nw:
+# if L > Ne + Nw:
+if 'cog' == 'log':
     print('Below half filling!')
     es, ws, vars_df = solve_rgEqs_1(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
                                     imscale_v=imv)
 else:
-    print('Above half filling!')
+    # print('Above half filling!')
     vars_df = solve_rgEqs_2(dims, gf, ks, dg=dg, g0=g0, imscale_k=imk,
                                     imscale_v=imv, skip=4)
 
 print('Done! Putting things in a CSV')
-vars_df.to_csv(RESULT_FP + 'solutions_full_{}_{}_{}.csv'.format(L, N, gf))
+vars_df.to_csv(RESULT_FP + 'good_solutions/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))
 
 energies = vars_df['energy']
 
