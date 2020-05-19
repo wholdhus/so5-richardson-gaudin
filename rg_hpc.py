@@ -23,7 +23,7 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-dg = 0.005/L
+dg = 0.01/L
 g0 = .1*dg
 imk = dg
 imv = .01*g0
@@ -51,7 +51,7 @@ print('')
 dims = (L, Ne, Nw)
 
 vars_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                        imscale_v=imv, skip=5*L)
+                        imscale_v=imv, skip=20*L)
 
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'good_solutions/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))

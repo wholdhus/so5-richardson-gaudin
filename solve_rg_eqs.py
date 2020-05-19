@@ -537,7 +537,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         g = gs[i]
         if i == 0:
             print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
-            sol = bootstrap_g0(dims, g0, kc, imscale_v)
+            sol = bootstrap_g0(dims, np.sign(gf)*g0, kc, imscale_v)
         else:
             sol = find_root_multithread(vars, kc, g, dims, imscale_v,
                                         max_steps=10, # if we loose it here, we don't get it back usually
@@ -636,7 +636,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         print('Now going from about infinity to G = {}'.format(G2))
         # this seems to have a problem /after/ the first g0 iteration
         # make g0 bigger? does this help?
-        output_df_2 = solve_rgEqs(dims, G2, k, dg=dg, g0=10*g0, imscale_k=imscale_k,
+        output_df_2 = solve_rgEqs(dims, G2, k, dg=dg, g0=g0, imscale_k=imscale_k,
                                   imscale_v=imscale_v, skip=skip)
         print('Number of rows before!')
         print(len(output_df_1))
