@@ -522,7 +522,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
-    vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
+    vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
     print(es)
@@ -634,7 +634,9 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                                 imscale_v=imscale_v, skip=skip)
         G2 = 1.1 * Gstar
         print('Now going from about infinity to G = {}'.format(G2))
-        output_df_2 = solve_rgEqs(dims, G2, k, dg=dg, g0=g0, imscale_k=imscale_k,
+        # this seems to have a problem /after/ the first g0 iteration
+        # make g0 bigger? does this help?
+        output_df_2 = solve_rgEqs(dims, G2, k, dg=dg, g0=10*g0, imscale_k=imscale_k,
                                   imscale_v=imscale_v, skip=skip)
         print('Number of rows before!')
         print(len(output_df_1))
