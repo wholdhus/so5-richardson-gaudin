@@ -417,7 +417,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
     prev_vars = vars
     prev_s = s
     while s > 0:
-        log('s = {}'.format(s))
+        # log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -465,7 +465,7 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
     prev_vars = vars
     prev_s = s
     while s > 0:
-        log('s = {}'.format(s))
+        # log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -656,7 +656,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('Stored values at {}'.format(g))
 
             i += 1
-            log('Finished with g = {}'.format(g))
+            # log('Finished with g = {}'.format(g))
         except Exception as e:
             raise
             print('Error during g incrementing')
@@ -769,7 +769,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     log('Continuing....')
 
             i += 1
-            log('Finished with g = {}'.format(g))
+            # log('Finished with g = {}'.format(g))
         except Exception as e:
             print('Error during g incrementing')
             print(e)
@@ -786,7 +786,6 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     qf = 1./(G_to_g(Gf, k))
     log('Final q: {}'.format(qf))
     qs = np.linspace(q0, qf, int(np.abs((qf-q0)/dg)))
-    log(qs)
     i = 0
     keep_going = True
     while i<len(qs) and keep_going:
@@ -822,7 +821,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 except:
                     pass
             i += 1
-            log('Finished with g = {}'.format(g))
+            # log('Finished with g = {}'.format(g))
         except Exception as e:
             print('Error during g incrementing')
             print(e)
