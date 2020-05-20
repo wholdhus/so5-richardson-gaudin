@@ -15,7 +15,7 @@ TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
-JOBS = CPUS
+JOBS = max(CPUS//4, 2)
 MAX_STEPS = 100
 
 lmd = {'maxiter': MAXIT,
@@ -599,10 +599,10 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     N = Ne + Nw
     gf = G_to_g(Gf, k)
     gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
-
+    print(gs)
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
-    vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
+    vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
     log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
     print(es)
@@ -617,7 +617,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         g = gs[i]
         if i == 0:
             print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
-            sol = bootstrap_g0(dims, g0, kc, imscale_v)
+            sol = bootstrap_g0(dims, g, kc, imscale_v)
         else:
             sol = find_root_multithread(vars, kc, g, dims, imscale_v,
                                         max_steps=10, # if we loose it here, we don't get it back usually
@@ -912,17 +912,17 @@ if __name__ == '__main__':
     d3E = np.gradient(d2E, G)
     plt.figure(figsize=(12,8))
     plt.subplot(2,2,1)
-    plt.scatter(G, E)
+    plt.scatter(L*G, E)
 
     plt.title('Energy')
     plt.subplot(2,2,2)
-    plt.scatter(G[5:-5], dE[5:-5])
+    plt.scatter(L*G[5:-5], dE[5:-5])
     plt.title('dE')
     plt.subplot(2,2,3)
-    plt.scatter(G[5:-5], d2E[5:-5])
+    plt.scatter(L*G[5:-5], d2E[5:-5])
     plt.title('d2E')
     plt.subplot(2,2,4)
-    plt.scatter(G[5:-5], d3E[5:-5])
+    plt.scatter(L*G[5:-5], d3E[5:-5])
     plt.title('d3E')
     plt.show()
 
