@@ -861,7 +861,8 @@ if __name__ == '__main__':
     Nw = int(input('Ndown: '))
 
     Gf = float(input('G: '))
-    JOBS = int(input('Number of concurrent jobs to run: '))
+    # JOBS = int(input('Number of concurrent jobs to run: '))
+
     dg = float(input('dg: '))
     N = Ne + Nw
 
@@ -883,7 +884,7 @@ if __name__ == '__main__':
     else:
         print('just using g')
         output_df = solve_rgEqs(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                                imscale_v=imv, skip=L)
+                                imscale_v=imv, skip=4*L)
     print('')
     print('Solution found:')
 
@@ -891,7 +892,7 @@ if __name__ == '__main__':
 
 
     Gf_actual = np.array(output_df['G'])[-1]
-    # Gf_actual = Gf
+
     rge = np.array(output_df['energy'])[-1]
 
     print('Energy: ')
