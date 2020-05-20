@@ -23,7 +23,7 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-dg = 0.005/L
+dg = 0.001/L
 g0 = .1*dg
 imk = dg
 imv = .01*g0
