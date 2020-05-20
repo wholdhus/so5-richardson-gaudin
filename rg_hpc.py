@@ -1,6 +1,5 @@
 import sys
 import pandas as pd
-import matplotlib.pyplot as plt
 from solve_rg_eqs import np, solve_rgEqs_2, G_to_g
 import json
 
@@ -23,8 +22,8 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-dg = 0.001/L
-g0 = .1*dg
+dg = 0.04/L
+g0 = min(.01*dg, 10**-4)
 imk = dg
 imv = .01*g0
 
@@ -51,12 +50,7 @@ print('')
 dims = (L, Ne, Nw)
 
 vars_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                        imscale_v=imv, skip=L)
+                        imscale_v=imv, skip=4*L)
 
 print('Done! Putting things in a CSV')
-vars_df.to_csv(RESULT_FP + 'good_solutions/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))
-
-energies = vars_df['energy']
-
-plt.scatter(vars_df['G'], energies)
-plt.savefig(RESULT_FP + 'figs/energies_full_{}_{}_{}.png'.format(L, N, np.round(Gf, 3)))
+vars_df.to_csv(RESULT_FP + 'antiperiodic/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))

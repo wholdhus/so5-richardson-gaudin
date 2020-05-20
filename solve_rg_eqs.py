@@ -15,7 +15,7 @@ TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
-JOBS = CPUS
+JOBS = int(0.25*CPUS)
 MAX_STEPS = 100
 
 lmd = {'maxiter': MAXIT,
@@ -794,7 +794,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print(er)
     print('Now incrementing 1/g!')
     q0 = 1./gs[-1]
-    qf = 1./(G_to_g(Gf, ks))
+    qf = 1./(G_to_g(Gf, k))
     print('Final q: {}'.format(qf))
     qs = np.linspace(q0, qf, int(np.abs((qf-q0)/dg)))
     print(qs)
