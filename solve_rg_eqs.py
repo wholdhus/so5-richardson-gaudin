@@ -929,7 +929,7 @@ if __name__ == '__main__':
     print('Hilbert space dimension: {}'.format(dimH))
     keep_going = input('Input 1 to diagonalize: ')
     if keep_going == '1':
-        from exact_qs_so5 import iom_dict, form_basis, ham_op, ham_op_2
+        from exact_diag import iom_dict, form_basis, ham_op, ham_op_2
         from quspin.operators import quantum_operator
         basis = form_basis(2*L, Ne, Nw)
 

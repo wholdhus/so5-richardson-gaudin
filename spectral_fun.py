@@ -1,9 +1,7 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator, quantum_LinearOperator
-# from quspin.tools.misc import dot
-from exact_qs_so5 import form_basis, ham_op, find_nk, ham_op_2, find_skz
+from exact_diag import form_basis, ham_op, find_nk, ham_op_2, find_skz
 import numpy as np
-# from scipy.sparse.linalg import eigsh
 from tqdm import tqdm
 from scipy.linalg import eigh_tridiagonal
 from scipy.special import binom
