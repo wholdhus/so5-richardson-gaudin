@@ -565,7 +565,9 @@ def bootstrap_g0(dims, g0, kc,
     vars = g0_guess(L, 2, 2, kc, g0, imscale=imscale_v)
     er = 10**-6
     for N in Ns:
+        log('')
         log('Now using {} fermions'.format(2*N))
+        log('')
         dims = (L, N, N)
         # Solving for 2N fermions using extrapolation from previous solution
         if N == 2:
@@ -815,19 +817,22 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('This is too bad')
                 return
             ces, cws = unpack_vars(vars, Ne, Nw)
-            if g_to_G(g, ks) <= 1.1*Gstar:
-                print('Still below Gstar. Better not try anything')
-            elif i % skip == 0 or q == qf:
-                log('Removing im(k) at g = {}'.format(g))
-                vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
-                                                steps=10*L)
-                varss += [vars_r]
-                es, ws = unpack_vars(vars_r, Ne, Nw)
-                print('Variables after removing im(k)')
-                print(es)
-                print(ws)
-                gss += [g]
-                log('Stored values at {}'.format(g))
+            # if g_to_G(g, ks) <= 1.1*Gstar:
+            #     print('Still below Gstar. Better not try anything')
+            if i % skip == 0 or q == qf:
+                try:
+                    log('Removing im(k) at g = {}'.format(g))
+                    vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
+                                                    steps=10*L)
+                    varss += [vars_r]
+                    es, ws = unpack_vars(vars_r, Ne, Nw)
+                    print('Variables after removing im(k)')
+                    print(es)
+                    print(ws)
+                    gss += [g]
+                    log('Stored values at {}'.format(g))
+                except:
+                    pass
             i += 1
             log('Finished with g = {}'.format(g))
         except:
@@ -870,28 +875,29 @@ if __name__ == '__main__':
     L = int(input('Length: '))
     Ne = int(input('Nup: '))
     Nw = int(input('Ndown: '))
-    print('Predicted Gc: ')
-    Gc = 8./((L+1)*(2*L+Ne+Nw))
-    print(Gc)
+    # print('Predicted Gc: ')
+    # Gc = 8./((L+1)*(2*L+Ne+Nw))
+    # print(Gc)
 
     Gf = float(input('G: '))
     JOBS = int(input('Number of concurrent jobs to run: '))
+    dg = float(input('dg: '))
     N = Ne + Nw
 
-    dg = 0.01/L
+    # dg = 0.01/L
     g0 = .1*dg/L
     imk = dg
     imv = .1*g0/N
 
 
     dims = (L, Ne, Nw)
-
-    ks = (1.0*np.arange(L) + 1.0)/L
+    # antiperiodic bc
+    ks = np.arange(1, 2*L+1, 2)*0.5*np.pi/L
     # gf = G_to_g(Gf, ks)
     # print('Input G corresponds to g = {}'.format(gf))
 
     output_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                              imscale_v=imv, skip=4*L)
+                              imscale_v=imv, skip=5*L)
     print('')
     print('Solution found:')
 
@@ -921,8 +927,7 @@ if __name__ == '__main__':
     plt.figure(figsize=(12,8))
     plt.subplot(2,2,1)
     plt.scatter(G, E)
-    if np.max(-1*G) > Gc:
-        plt.axvline(-1*Gc)
+
     plt.title('Energy')
     plt.subplot(2,2,2)
     plt.scatter(G[5:-5], dE[5:-5])

@@ -28,7 +28,7 @@ g0 = .1*dg
 imk = dg
 imv = .01*g0
 
-ks = (1.0*np.arange(L) + 1.0)/L
+ks = np.arange(1, 2*L+1, 2)*0.5*np.pi/L
 
 gf = G_to_g(Gf, ks)
 
@@ -51,7 +51,7 @@ print('')
 dims = (L, Ne, Nw)
 
 vars_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                        imscale_v=imv, skip=5*L)
+                        imscale_v=imv, skip=L)
 
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'good_solutions/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))
