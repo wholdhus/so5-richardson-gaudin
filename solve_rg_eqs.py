@@ -437,12 +437,18 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
             prev_vars = vars
             s -= ds
         elif er > TOL2:
-            log('Badd error: {}'.format(er))
-            if ds > 10**-5:
+            log('Bad error: {} at s = {}'.format(er, s))
+            if ds > 10**-4: # Going lower doesn't seem to help
                 log('Backing up and decreasing ds')
                 ds *= 0.5
                 vars = prev_vars
                 s = prev_s - ds
+            else:
+                log('ds is already as small as we can make it.')
+                return # exiting this part
+                # prev_s = s
+                # prev_vars = vars
+                # s -= ds
         else:
             prev_s = s
             prev_vars =vars
@@ -485,12 +491,17 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
             prev_vars = vars
             s -= ds
         elif er > TOL2:
-            log('Badd error: {}'.format(er))
-            if ds > 10**-5:
+            log('Bad error: {} at s = {}'.format(er, s))
+            if ds > 10**-4: # lower doesn't really help us
                 log('Backing up and decreasing ds')
                 ds *= 0.5
                 vars = prev_vars
                 s = prev_s - ds
+            else:
+                return
+                # prev_s = s
+                # prev_vars = vars
+                # s -= ds
         else:
             prev_s = s
             prev_vars =vars
@@ -526,10 +537,10 @@ def calculate_energies(varss, gs, ks, Ne):
         ces, cws = unpack_vars(varss[:, i], Ne, Ne)
         R = ioms(ces, g, ks)
         Rs[i, :] = np.real(R)
-        log(R)
+        # log(R)
         const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
         energies[i] = np.sum(ks*np.real(R))*2/(1 + g*np.sum(ks)) - const
-        log(energies[i])
+        # log(energies[i])
     return energies, Rs
 
 
@@ -550,7 +561,7 @@ def bootstrap_g0(dims, g0, kc,
                  imscale_v=0.001):
     L, Ne, Nw = dims
     if Ne%2 != 0 or Nw%2 != 0:
-        print('Error! I need even spin up and down :<')
+        print('Error! I need even spin up and down!')
         return
     Ns = np.arange(2, Ne+1, 2)
     vars = g0_guess(L, 2, 2, kc, g0, imscale=imscale_v)
