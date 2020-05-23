@@ -17,7 +17,7 @@ MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
 JOBS = max(CPUS//2, 2)
-MAX_STEPS = 100
+MAX_STEPS = 100 * JOBS 
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
