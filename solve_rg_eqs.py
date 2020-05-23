@@ -11,8 +11,8 @@ from utils import * # There are a lot of boring functions in this other file
 
 VERBOSE=True
 FORCE_GS=True
-TOL=10**-10
-TOL2=10**-8 # there are plenty of spurious minima around 10**-5
+TOL=10**-11
+TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
@@ -466,10 +466,16 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     min_dg = np.abs(gf - g) / 10**5 # I don't want to do more than 10**5 steps
     print('Incrementing from {} to {}'.format(g0, gf))
     while keep_going and g != gf:
+        log('g = {}'.format(g))
         if i == 0:
             print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
-            sol = bootstrap_g0(dims, g, kc, imscale_v)
-            vars = sol.x
+            try:
+                sol = bootstrap_g0(dims, g, kc, imscale_v)
+                vars = sol.x
+            except:
+                print('Failed at the initial step.')
+                print('Quitting without output')
+                return
         else:
             # sol = find_root_multithread(vars, kc, g, dims, imscale_v,
             #                             max_steps=5, # if we loose it here, we don't get it back usually
@@ -480,9 +486,6 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             prev_vars = vars # so we can revert if needed
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
-            if er > 10**-5 and i > 1:
-                print('This is too bad')
-                raise Exception('Too bad!')
             ces, cws = unpack_vars(vars, Ne, Nw)
             if np.isnan(ces).any() or np.isnan(cws).any():
                 print('Solution is NAN. Ending g loop')
