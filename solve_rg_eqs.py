@@ -248,7 +248,7 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
             s -= ds
         elif er > TOL2:
             log('Bad error: {} at s = {}'.format(er, s))
-            if ds > 10**-4: # lower doesn't really help us
+            if ds > 10**-3: # lower doesn't really help us
                 log('Backing up and decreasing ds')
                 ds *= 0.5
                 vars = prev_vars
@@ -463,16 +463,21 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     n_fails = 0
     dg0 = dg
     g = g0
+    min_dg = np.abs(gf - g) / 10**5 # I don't want to do more than 10**5 steps
     print('Incrementing from {} to {}'.format(g0, gf))
     while keep_going and g != gf:
         if i == 0:
             print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
             sol = bootstrap_g0(dims, g, kc, imscale_v)
+            vars = sol.x
         else:
-            sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=5, # if we loose it here, we don't get it back usually
-                                        use_k_guess=False, force_gs=False)
+            # sol = find_root_multithread(vars, kc, g, dims, imscale_v,
+            #                             max_steps=5, # if we loose it here, we don't get it back usually
+            #                             use_k_guess=False, force_gs=False)
+            sol = root(rgEqs, vars, args=(kc, g, dims),
+                       method='lm', options=lmd, jac=rg_jac)
         try:
+            prev_vars = vars # so we can revert if needed
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
             if er > 10**-5 and i > 1:
@@ -500,22 +505,29 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     log('Failed while incrementing im part')
                     log('Continuing....')
                     # i += 1
-                    keep_going=False
+                    er = 1 # so we decrease step size
             if er < TOL and dg < 10**-2:
-                print('Low error!!!')
                 print('Changing dg from {} to {}'.format(dg, dg*2))
                 dg *= 2 # we can take bigger steps
-            elif er > TOL2 and dg > 10**-4:
-                print('Highish error!!!')
+            elif er > TOL2 and dg > min_dg:
                 print('Changing dg from {} to {}'.format(dg, dg*0.5))
-                dg *= 0.5 # we can take bigger steps
-            if np.abs(g - gf) < 1.5*dg: # close enough
+                g_prev = g - dg*np.sign(gf) # resetting to last value
+                dg *= 0.1
+                print('Stepping back from {} to {}'.format(g, g_prev))
+                g = g_prev
+                vars = prev_vars
+            elif er > 10*TOL2 and dg < min_dg:
+                print('Very high error: {}'.format(er))
+                print('Cannot make dg smaller!')
+                print('Stopping!')
+                keep_going = False
+            if np.abs(g - gf) < TOL2:
+                print('At gf')
+                keep_going = False
+            elif np.abs(g - gf) < 1.5*dg: # close enough
                 print('Close enough to gf')
                 g = gf
                 i += 1
-            elif np.abs(g - gf) < TOL2:
-                print('At gf')
-                keep_going = False
             else:
                 i += 1
                 g += dg * np.sign(gf)
@@ -533,46 +545,57 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print('Now incrementing 1/g!')
     q0 = 1./gf
     qf = 1./(G_to_g(Gf, k))
+    min_dq = np.abs(q0 - qf) / 10**5 # Taking at most 10**5 steps
     log('Final q: {}'.format(qf))
     dq = dg0
     i = 0
     q = q0
     keep_going = True
     while keep_going:
+        log('q = {}'.format(q))
         g = 1./q
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
                    method='lm', options=lmd) # need jacobian?
         try:
+            prev_vars = vars
             vars = sol.x
             er = max(abs(rgEqs_q(vars, kc, q, dims)))
-            if er > 0.001 and i > 1:
-                print('This is too bad')
-                raise Exception('Too bad!')
             ces, cws = unpack_vars(vars, Ne, Nw)
-            if np.isnan(ces).any() or np.isnan(cws).any() or er > 10**-5:
-                print('This is too bad. Stopping!')
-                keep_going = False
             if i % skip == 0 or q == qf:
                 try:
                     log('Removing im(k) at q = {}'.format(q))
                     vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
                                                     steps=10*L)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
-                    # log('Variables after removing im(k)')
-                    # log(es)
-                    # log(ws)
                     gss += [g]
                     varss += [vars_r]
                 except:
                     i += 1
                     print('Failed while incrementing im part')
                     print('Continuing ...')
+                    er = 1 # so we decrease step size
+
+            """
+            Changing step sizes if appropriate
+            """
             if er < TOL and dq < 10**-2: # Let's allow larger steps for q
                 print('Changing dq from {} to {}'.format(dq, 2*dq))
                 dq *= 2
-            elif er > TOL2 and dq > 10**-3:
+            elif er > TOL2 and dq > min_dq:
                 print('Changing dq from {} to {}'.format(dq, 0.5*dq))
-                dq *= 0.5
+                q_prev = q - dq*np.sign(qf) # resetting to last value
+                dq *= 0.1
+                print('Stepping back from {} to {}'.format(q, q_prev))
+                q = q_prev
+                vars = prev_vars
+            elif er > 10*TOL2 and dq < min_dq:
+                print('Very high error: {}'.format(er))
+                print('Cannot make dq smaller!')
+                print('Stopping!')
+                keep_going=False
+            """
+            Checking if we are done or close to done
+            """
             if np.abs(q-qf) < TOL2:
                 print('DID QF!!!!!!!!!')
                 keep_going = False
@@ -580,6 +603,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('SKIPPING TO QF')
                 q = qf
                 i += 1
+
             else:
                 i += 1
                 q += dq * np.sign(qf)
