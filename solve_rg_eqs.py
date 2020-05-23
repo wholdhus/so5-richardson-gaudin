@@ -11,15 +11,13 @@ from utils import * # There are a lot of boring functions in this other file
 
 VERBOSE=True
 FORCE_GS=True
-TOL=10**-12
-TOL2=10**-7 # there are plenty of spurious minima around 10**-5
+TOL=10**-10
+TOL2=10**-8 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
 JOBS = max(CPUS//4, 2)
 MAX_STEPS = 100
-
-FAIL_LIMIT = 1
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -135,7 +133,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     es, ws = unpack_vars(vars, Ne, Nw)
-    if min(abs(ws)) < 0.5*abs(kc[0]) and FORCE_GS:
+    if min(abs(ws)) < 0.5*abs(kc[0]) and force_gs:
         print('Omega = 0 solution! Rerunning.')
         er = 1
     tries = 1
@@ -170,11 +168,12 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
         sol = sols[np.argmin(ers)]
         vars = sol.x
 
-        tries += 1
+        tries += JOBS
     return sol
 
 
-def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
+def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS,
+                   force_gs=True):
     L, Ne, Nw = dims
     ds = 1./steps
     s = 1.0
@@ -187,7 +186,8 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
         kc = np.concatenate((k, s*im_k))
         im_v = min(np.linalg.norm(s*im_k), 10**-6)
         sol = find_root_multithread(vars, kc, g, dims, im_v,
-                                    max_steps=max_steps)
+                                    max_steps=max_steps,
+                                    force_gs=force_gs)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 0.001:
@@ -285,7 +285,8 @@ def bootstrap_g0(dims, g0, kc,
         if N == 2:
             sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
                                         max_steps=MAX_STEPS,
-                                        use_k_guess=True)
+                                        use_k_guess=False,
+                                        force_gs=False)
         else:
             # The previous solution matches to roughly the accuracy of the solution
             # for the shared variables
@@ -389,8 +390,8 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             sol = bootstrap_g0(dims, g, kc, imscale_v)
         else:
             sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=10, # if we loose it here, we don't get it back usually
-                                        use_k_guess=True)
+                                        max_steps=JOBS//4, # if we loose it here, we don't get it back usually
+                                        force_gs=False)
         try:
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
@@ -404,7 +405,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('Removing im(k) at g = {}'.format(g))
                 vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
                                             steps=10*L,
-                                            max_steps=10*JOBS)
+                                            max_steps=JOBS)
                 varss += [vars_r]
                 es, ws = unpack_vars(vars_r, Ne, Nw)
                 print('Variables after removing im(k)')
@@ -448,7 +449,6 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     N = Ne + Nw
     Gstar = 1./np.sum(k)
     gf = G_to_g(0.9*Gstar, k)
-    gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
@@ -461,19 +461,21 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     varss = []
     gss = []
     n_fails = 0
-    while i<len(gs) and keep_going:
-        g = gs[i]
+    dg0 = dg
+    g = g0
+    print('Incrementing from {} to {}'.format(g0, gf))
+    while keep_going and g != gf:
         if i == 0:
-            print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
-            sol = bootstrap_g0(dims, g0, kc, imscale_v)
+            print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
+            sol = bootstrap_g0(dims, g, kc, imscale_v)
         else:
             sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=MAX_STEPS, # if we loose it here, we don't get it back usually
+                                        max_steps=5, # if we loose it here, we don't get it back usually
                                         use_k_guess=False, force_gs=False)
         try:
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
-            if er > 0.001 and i > 1:
+            if er > 10**-5 and i > 1:
                 print('This is too bad')
                 raise Exception('Too bad!')
             ces, cws = unpack_vars(vars, Ne, Nw)
@@ -487,7 +489,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
                                                 steps=10*L,
-                                                max_steps=10*JOBS)
+                                                max_steps=5)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
                     log(es)
@@ -496,31 +498,48 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     gss += [g]
                 except Exception as e:
                     log('Failed while incrementing im part')
-                    log(e)
                     log('Continuing....')
-            i += 1
+                    # i += 1
+                    keep_going=False
+            if er < TOL and dg < 10**-2:
+                print('Low error!!!')
+                print('Changing dg from {} to {}'.format(dg, dg*2))
+                dg *= 2 # we can take bigger steps
+            elif er > TOL2 and dg > 10**-4:
+                print('Highish error!!!')
+                print('Changing dg from {} to {}'.format(dg, dg*0.5))
+                dg *= 0.5 # we can take bigger steps
+            if np.abs(g - gf) < 1.5*dg: # close enough
+                print('Close enough to gf')
+                g = gf
+                i += 1
+            elif np.abs(g - gf) < TOL2:
+                print('At gf')
+                keep_going = False
+            else:
+                i += 1
+                g += dg * np.sign(gf)
         except Exception as e:
             print('Error during g incrementing')
-            print(e)
+            # print(e)
             print('Quitting the g increments')
-        print('Terminated at g = {}'.format(g))
-        gs = gs[:i-1]
-        gf = gs[-1]
+            keep_going=False
+    print('Failed at g = {}'.format(g))
+    gf = g - dg*np.sign(gf)
+    print('Rolling back to previous value: {}'.format(gf))
     print('')
     print('Done incrementing g. Error:')
     print(er)
     print('Now incrementing 1/g!')
-    q0 = 1./gs[-1]
+    q0 = 1./gf
     qf = 1./(G_to_g(Gf, k))
     log('Final q: {}'.format(qf))
-    dq = dg # will this work? I hope so!
-    qs = np.linspace(q0, qf, int(np.abs((qf-q0)/dq)))
+    dq = dg0
     i = 0
+    q = q0
     keep_going = True
-    while i<len(qs) and keep_going:
-        q = qs[i]
+    while keep_going:
         g = 1./q
-        # TODO: rewrite multithread root finding to use q
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
                    method='lm', options=lmd) # need jacobian?
         try:
@@ -530,30 +549,49 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('This is too bad')
                 raise Exception('Too bad!')
             ces, cws = unpack_vars(vars, Ne, Nw)
-            if np.isnan(ces).any() or np.isnan(cws).any():
+            if np.isnan(ces).any() or np.isnan(cws).any() or er > 10**-5:
+                print('This is too bad. Stopping!')
                 keep_going = False
             if i % skip == 0 or q == qf:
                 try:
-                    log('Removing im(k) at g = {}'.format(g))
+                    log('Removing im(k) at q = {}'.format(q))
                     vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
                                                     steps=10*L)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
-                    log('Variables after removing im(k)')
-                    log(es)
-                    log(ws)
+                    # log('Variables after removing im(k)')
+                    # log(es)
+                    # log(ws)
                     gss += [g]
                     varss += [vars_r]
                 except:
-                    pass
-            i += 1
+                    i += 1
+                    print('Failed while incrementing im part')
+                    print('Continuing ...')
+            if er < TOL and dq < 10**-2: # Let's allow larger steps for q
+                print('Changing dq from {} to {}'.format(dq, 2*dq))
+                dq *= 2
+            elif er > TOL2 and dq > 10**-3:
+                print('Changing dq from {} to {}'.format(dq, 0.5*dq))
+                dq *= 0.5
+            if np.abs(q-qf) < TOL2:
+                print('DID QF!!!!!!!!!')
+                keep_going = False
+            elif np.abs(q - qf) < 1.5*dq: # close enough
+                print('SKIPPING TO QF')
+                q = qf
+                i += 1
+            else:
+                i += 1
+                q += dq * np.sign(qf)
+
         except Exception as e:
             print('Error during g incrementing')
-            print(e)
+            # print(e)
             keep_going = False
-    if not keep_going:
-        print('Terminated at g = {}'.format(g))
-        qs = qs[:i-1]
-        qf = qs[-1]
+
+    print('Terminated at q = {}'.format(q))
+    print('Error: {}'.format(er))
+    qf = q
     varss = np.array(varss)
     gss = np.array(gss)
     output_df = pandas.DataFrame({})
