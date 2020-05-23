@@ -124,7 +124,7 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False):
     return op_dict
 
 
-def iom_dict(L, G, k, k1=0, mult=1, kin=1, g_spin=1, g_dens=1):
+def iom_dict(L, g, k, k1=0, mult=1, kin=1, g_spin=1, g_dens=1):
 
     ppairing = [] # spin 1 pairing
     zpairing = [] # spin 0 pairing
@@ -138,7 +138,7 @@ def iom_dict(L, G, k, k1=0, mult=1, kin=1, g_spin=1, g_dens=1):
     all_k = [[0.5*mult, p_k1], [0.5*mult, m_k1]]
     for k2 in range(L):
         if k2 != k1:
-            Zkk = mult*G*k[k2]*k[k1]/(k[k2]-k[k1])
+            Zkk = mult*g*k[k2]*k[k1]/(k[k2]-k[k1])
             p_k2 = L + k2 # index of +k fermions
             m_k2 = L - (k2+1) # index of -k fermions
             ppairing += [
@@ -327,7 +327,7 @@ def ham_op(L, G, ks, basis, dtype=np.float64):
 def ham_op_2(L, G, ks, basis, no_kin=False):
     hd = hamiltonian_dict(L, G, ks, no_kin=no_kin)
 
-    h = quantum_operator(hd, basis=basis, check_herm=False)
+    h = quantum_operator(hd, basis=basis, check_herm=True)
     return h
 
 

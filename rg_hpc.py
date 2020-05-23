@@ -23,7 +23,7 @@ Ne = N//2
 Nw = N//2
 
 dg = 0.04/L
-g0 = min(.01*dg, 10**-4)
+g0 = .01*dg
 imk = dg
 imv = .01*g0
 
