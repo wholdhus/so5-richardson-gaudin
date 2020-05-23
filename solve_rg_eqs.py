@@ -469,8 +469,8 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         log('g = {}'.format(g))
         if i == 0:
             print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
-            sol = bootstrap_g0(dims, g, kc, imscale_v)
             try:
+                sol = bootstrap_g0(dims, g, kc, imscale_v)
                 vars = sol.x
             except:
                 print('Failed at the initial step.')
