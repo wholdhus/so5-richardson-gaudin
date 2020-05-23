@@ -7,8 +7,7 @@ from traceback import print_exc
 import concurrent.futures
 import multiprocessing
 
-from utils import *
-
+from utils import * # There are a lot of boring functions in this other file
 
 VERBOSE=True
 FORCE_GS=True
@@ -19,6 +18,8 @@ FACTOR=100
 CPUS = multiprocessing.cpu_count()
 JOBS = max(CPUS//4, 2)
 MAX_STEPS = 100
+
+FAIL_LIMIT = 1
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -153,9 +154,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
             return
         log('{}th try at g = {}'.format(tries, g))
         log('Smallest error from last set: {}'.format(er))
-        # log('Retrying with {} sets of new vars:'.format(JOBS))
         if use_k_guess:
-            # log('Using k + noise')
             vars0 = np.concatenate(
                                  (np.concatenate((kc[np.arange(Ne)//2],
                                                   kc[L+np.arange(Ne)//2])),
@@ -172,22 +171,16 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
         vars = sol.x
 
         tries += 1
-    # if not use_k_guess:
-    #     # It's more important that I see how my initial guess performed here.
-    #     log('Solution - initial guess')
-    #     log(vars - vars0)
     return sol
 
 
 def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
     L, Ne, Nw = dims
-    # scale = 1 - np.linspace(0, sf, steps)
     ds = 1./steps
     s = 1.0
     prev_vars = vars
     prev_s = s
     while s > 0:
-        # log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -201,14 +194,13 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
             print('This is too bad')
             return
         if er < TOL and ds < 0.08:
-            # log('Error is small. Increasing ds')
-            ds *= 1.1
+            ds *= 1.2
             prev_s = s
             prev_vars = vars
             s -= ds
         elif er > TOL2:
             log('Bad error: {} at s = {}'.format(er, s))
-            if ds > 10**-4: # Going lower doesn't seem to help
+            if ds > 10**-3: # Going lower doesn't seem to help
                 log('Backing up and decreasing ds')
                 ds *= 0.5
                 vars = prev_vars
@@ -216,9 +208,6 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
             else:
                 log('ds is already as small as we can make it.')
                 return # exiting this part
-                # prev_s = s
-                # prev_vars = vars
-                # s -= ds
         else:
             prev_s = s
             prev_vars =vars
@@ -233,15 +222,12 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS):
 
 
 def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
-    # print('dims')
-    # print(dims)
     L, Ne, Nw = dims
     ds = 1./steps
     s = 1.0
     prev_vars = vars
     prev_s = s
     while s > 0:
-        # log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -269,62 +255,16 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
                 s = prev_s - ds
             else:
                 return
-                # prev_s = s
-                # prev_vars = vars
-                # s -= ds
         else:
             prev_s = s
             prev_vars =vars
             s -= ds
-    # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
     sol = root(rgEqs_q, vars, args=(kc, q, dims),
                method='lm', options=lmd)
     vars = sol.x
     er = max(abs(rgEqs_q(vars, kc, q, dims)))
     return vars, er
-
-
-def ioms(es, g, ks, extra_bits=False):
-    L = len(ks)
-    R = np.zeros(L, dtype=np.complex128)
-    for i, k in enumerate(ks):
-        R_r = g*np.sum(reZ(k, 0, np.real(es), np.imag(es)))
-        R_i = g*np.sum(imZ(k, 0, np.real(es), np.imag(es)))
-        R[i] = R_r + 1j*R_i
-        if extra_bits:
-            otherks = ks[np.arange(L) != i]
-            Zkk = rationalZ(k, otherks)
-            R[i] += -1*g*np.sum(Zkk) + 1.0
-    return R
-
-
-def calculate_energies(varss, gs, ks, Ne):
-    energies = np.zeros(len(gs))
-    Rs = np.zeros((len(gs), len(ks)))
-    log('Calculating R_k, energy')
-    for i, g in enumerate(gs):
-        ces, cws = unpack_vars(varss[:, i], Ne, Ne)
-        R = ioms(ces, g, ks)
-        Rs[i, :] = np.real(R)
-        # log(R)
-        const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
-        energies[i] = np.sum(ks*np.real(R))*2/(1 + g*np.sum(ks)) - const
-        # log(energies[i])
-    return energies, Rs
-
-
-def calculate_n_k(Rs, gs):
-    dRs = np.zeros(np.shape(Rs))
-    nks = np.zeros(np.shape(Rs))
-    L = np.shape(Rs)[1]
-    for k in range(L):
-        Rk = Rs[:, k]
-        dRk = np.gradient(Rk, gs)
-        nk = 2*(Rk - gs * dRk)
-        dRs[:, k] = dRk
-        nks[:, k] = nk
-    return dRs, nks
 
 
 def bootstrap_g0(dims, g0, kc,
@@ -374,13 +314,63 @@ def bootstrap_g0(dims, g0, kc,
     return sol
 
 
+def ioms(es, g, ks, extra_bits=False):
+    L = len(ks)
+    R = np.zeros(L, dtype=np.complex128)
+    for i, k in enumerate(ks):
+        R_r = g*np.sum(reZ(k, 0, np.real(es), np.imag(es)))
+        R_i = g*np.sum(imZ(k, 0, np.real(es), np.imag(es)))
+        R[i] = R_r + 1j*R_i
+        if extra_bits:
+            otherks = ks[np.arange(L) != i]
+            Zkk = rationalZ(k, otherks)
+            R[i] += -1*g*np.sum(Zkk) + 1.0
+    return R
+
+"""
+Code for getting observables from the pairons
+"""
+
+def calculate_energies(varss, gs, ks, Ne):
+    energies = np.zeros(len(gs))
+    Rs = np.zeros((len(gs), len(ks)))
+    log('Calculating R_k, energy')
+    for i, g in enumerate(gs):
+        ces, cws = unpack_vars(varss[:, i], Ne, Ne)
+        R = ioms(ces, g, ks)
+        Rs[i, :] = np.real(R)
+        # log(R)
+        const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
+        energies[i] = np.sum(ks*np.real(R))*2/(1 + g*np.sum(ks)) - const
+        # log(energies[i])
+    return energies, Rs
+
+
+def calculate_n_k(Rs, gs):
+    dRs = np.zeros(np.shape(Rs))
+    nks = np.zeros(np.shape(Rs))
+    L = np.shape(Rs)[1]
+    for k in range(L):
+        Rk = Rs[:, k]
+        dRk = np.gradient(Rk, gs)
+        nk = 2*(Rk - gs * dRk)
+        dRs[:, k] = dRk
+        nks[:, k] = nk
+    return dRs, nks
+
+"""
+Code for getting pairons and observables
+"""
+
 def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                   imscale_v=0.001, skip=4):
     L, Ne, Nw = dims
     N = Ne + Nw
     gf = G_to_g(Gf, k)
-    gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
-    print(gs)
+    Gs = np.linspace(g0 * np.sign(Gf), Gf, int(np.abs(Gf/dg)))
+    gs = G_to_g(Gs, k)
+    # gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
+    # print(gs)
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
@@ -388,12 +378,10 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     es, ws = unpack_vars(vars, Ne, Nw)
     print(es)
     print(ws)
-
     keep_going = True
     i = 0
     varss = []
     gss = []
-
     while i<len(gs) and keep_going:
         g = gs[i]
         if i == 0:
@@ -411,18 +399,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 return
             ces, cws = unpack_vars(vars, Ne, Nw)
             if i == 0:
-                log('Status: {}'.format(sol.status))
-                log('Msg: {}'.format(sol.message))
-                log('Iterations: {}'.format(sol.nfev))
-                log('g = {}'.format(g))
-                log('er: {}'.format(er))
-                log('Solution vector:')
-                log(vars)
-                k_full = k + 1j*kim
-                log('es - k:')
-                log(ces - k_full[np.arange(Ne)//2])
-                log('omegas - k:')
-                log(cws - k_full[np.arange(Nw)//2])
+                pass
             elif i % skip == 0 or g == gf and i > 0:
                 log('Removing im(k) at g = {}'.format(g))
                 vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
@@ -435,11 +412,8 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print(ws)
                 gss += [g]
                 log('Stored values at {}'.format(g))
-
             i += 1
-            # log('Finished with g = {}'.format(g))
         except Exception as e:
-            raise
             print('Error during g incrementing')
             keep_going = False
     varss = np.array(varss)
@@ -451,14 +425,10 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print('')
     print('Final error:')
     print(er)
-
     gss = np.array(gss)
-    # print(np.shape(varss))
-
     output_df = pandas.DataFrame({})
     output_df['g'] = gss
     output_df['G'] = g_to_G(gss, k)
-
     for n in range(Ne):
         output_df['Re(e_{})'.format(n)] = varss[:, n]
         output_df['Im(e_{})'.format(n)] = varss[:, n+Ne]
@@ -467,13 +437,8 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     output_df['energy'], Rs = calculate_energies(np.transpose(varss), gss, k, Ne)
     dRs, nks = calculate_n_k(Rs, gss)
     for n in range(L):
-        # print(np.shape(Rs[:, n]))
         output_df['R_{}'.format(n)] = Rs[:, n]
         output_df['N_{}'.format(n)] = nks[:, n]
-
-
-
-    # ces, cws = unpack_vars(varss[:, -1], Ne, Nw)
     return output_df
 
 
@@ -481,12 +446,9 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                   imscale_v=0.001, skip=4):
     L, Ne, Nw = dims
     N = Ne + Nw
-
     Gstar = 1./np.sum(k)
     gf = G_to_g(0.9*Gstar, k)
-
     gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
-
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
@@ -494,12 +456,11 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     es, ws = unpack_vars(vars, Ne, Nw)
     print(es)
     print(ws)
-
     keep_going = True
     i = 0
     varss = []
     gss = []
-
+    n_fails = 0
     while i<len(gs) and keep_going:
         g = gs[i]
         if i == 0:
@@ -507,8 +468,8 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             sol = bootstrap_g0(dims, g0, kc, imscale_v)
         else:
             sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=4, # if we loose it here, we don't get it back usually
-                                        use_k_guess=True)
+                                        max_steps=MAX_STEPS, # if we loose it here, we don't get it back usually
+                                        use_k_guess=False, force_gs=False)
         try:
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
@@ -520,18 +481,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('Solution is NAN. Ending g loop')
                 keep_going = False
             if i == 0:
-                log('Status: {}'.format(sol.status))
-                log('Msg: {}'.format(sol.message))
-                log('Iterations: {}'.format(sol.nfev))
-                log('g = {}'.format(g))
-                log('er: {}'.format(er))
-                log('Solution vector:')
-                log(vars)
-                k_full = k + 1j*kim
-                log('es - k:')
-                log(ces - k_full[np.arange(Ne)//2])
-                log('omegas - k:')
-                log(cws - k_full[np.arange(Nw)//2])
+                pass
             elif i % skip == 0 or g == gf and i > 0:
                 log('Removing im(k) at g = {}'.format(g))
                 try:
@@ -548,14 +498,11 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     log('Failed while incrementing im part')
                     log(e)
                     log('Continuing....')
-
             i += 1
-            # log('Finished with g = {}'.format(g))
         except Exception as e:
             print('Error during g incrementing')
             print(e)
-            keep_going = False
-    if not keep_going:
+            print('Quitting the g increments')
         print('Terminated at g = {}'.format(g))
         gs = gs[:i-1]
         gf = gs[-1]
@@ -566,16 +513,14 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     q0 = 1./gs[-1]
     qf = 1./(G_to_g(Gf, k))
     log('Final q: {}'.format(qf))
-    qs = np.linspace(q0, qf, int(np.abs((qf-q0)/dg)))
+    dq = dg # will this work? I hope so!
+    qs = np.linspace(q0, qf, int(np.abs((qf-q0)/dq)))
     i = 0
     keep_going = True
     while i<len(qs) and keep_going:
         q = qs[i]
         g = 1./q
-        # sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-        #                             max_steps=10, # if we loose it here, we don't get it back usually
-        #                             use_k_guess=True)
-
+        # TODO: rewrite multithread root finding to use q
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
                    method='lm', options=lmd) # need jacobian?
         try:
@@ -592,7 +537,6 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     log('Removing im(k) at g = {}'.format(g))
                     vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
                                                     steps=10*L)
-
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
                     log(es)
@@ -602,7 +546,6 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 except:
                     pass
             i += 1
-            # log('Finished with g = {}'.format(g))
         except Exception as e:
             print('Error during g incrementing')
             print(e)
@@ -611,15 +554,11 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         print('Terminated at g = {}'.format(g))
         qs = qs[:i-1]
         qf = qs[-1]
-
     varss = np.array(varss)
     gss = np.array(gss)
-
-
     output_df = pandas.DataFrame({})
     output_df['g'] = gss
     output_df['G'] = g_to_G(gss, k)
-
     for n in range(Ne):
         output_df['Re(e_{})'.format(n)] = varss[:, n]
         output_df['Im(e_{})'.format(n)] = varss[:, n+Ne]
@@ -630,6 +569,10 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     for n in range(L):
         output_df['R_{}'.format(n)] = Rs[:, n]
         output_df['N_{}'.format(n)] = nks[:, n]
+    print('')
+    print(['!' for i in range(40)])
+    print('Finished!')
+    print(['!' for i in range(40)])
     return output_df
 
 

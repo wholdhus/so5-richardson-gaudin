@@ -1,3 +1,7 @@
+VERBOSE = True
+
+import numpy as np
+
 def log(msg):
     if VERBOSE:
         print(msg)
