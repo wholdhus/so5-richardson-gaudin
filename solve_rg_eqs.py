@@ -11,7 +11,7 @@ from utils import * # There are a lot of boring functions in this other file
 
 VERBOSE=True
 FORCE_GS=True
-TOL=10**-11
+TOL=10**-10
 TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100

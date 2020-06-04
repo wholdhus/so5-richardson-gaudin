@@ -1,33 +1,15 @@
 from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator, quantum_LinearOperator
-from exact_diag import form_basis, ham_op, find_nk, ham_op_2, find_skz
+from exact_diag import form_basis, ham_op, find_nk, ham_op_2, find_skz, reduce_state
 import numpy as np
 from tqdm import tqdm
 from scipy.linalg import eigh_tridiagonal
 from scipy.special import binom
+import matplotlib.pyplot as plt
 
+from utils import log
 
-def reduce_state(v, full_basis, target_basis, test=False):
-    # v *= 1./np.linalg.norm(v)
-    fdim = len(v)
-    v_out = np.zeros(len(target_basis.states), dtype=np.complex128)
-    for i, s in enumerate(target_basis.states):
-        # full_ind = np.where(full_basis.states == s)[0][0]
-        v_out[i] = v[fdim - s - 1]
-        # v_out[i] = v[full_ind]
-    if test:
-        vf = target_basis.get_vec(v_out, sparse=False)
-        print('<vin|vout>')
-        print(np.vdot(v, vf))
-        print('| |vin> - |vout> |')
-        print(np.linalg.norm(v - vf))
-        print('Equal?')
-        print((v == vf).all())
-        print('Norms')
-        print(np.linalg.norm(v))
-        print(np.linalg.norm(v_out))
-    return v_out/np.linalg.norm(v_out)
-
+VERBOSE = False
 
 def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
 
@@ -40,11 +22,11 @@ def akboth(omega, celts, delts, e0, ep, em, epsilon=10**-10):
     d1 = np.linalg.norm(gps - gp2.imag)
     d2 = np.linalg.norm(gms - gm2.imag)
     if d1 > 10**-10 or d2 > 10**-10:
-        print('Woah these should be zero')
-        print('Diff in g^+')
-        print(np.linalg.norm(gps - gp2.imag))
-        print('Diff in g^-')
-        print(np.linalg.norm(gms - gm2.imag))
+        log('Woah these should be zero')
+        log('Diff in g^+')
+        log(np.linalg.norm(gps - gp2.imag))
+        log('Diff in g^-')
+        log(np.linalg.norm(gms - gm2.imag))
     # return (np.sum(gps) - np.sum(gms)).imag/(-1*np.pi), (np.sum(gm2) - np.sum(gp2)).imag/np.pi
     return np.sum(gp2).imag/np.pi, np.sum(gm2.imag)/np.pi
 
@@ -58,7 +40,7 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     bf is the basis for all N
     """
     if operators is None:
-        print('Creating at {}th spot'.format(k))
+        log('Creating at {}th spot'.format(k))
         kl = [[1.0, k]]
         cl = [['+|', kl]]
         dl = [['-|', kl]]
@@ -68,8 +50,8 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
                                    check_herm=False)
     else:
         cp_lo, cm_lo = operators
-        print(cp_lo)
-        print(cm_lo)
+        log(cp_lo)
+        log(cm_lo)
     cpv0 = cp_lo.dot(v0)
     cmv0 = cm_lo.dot(v0)
     cpv = reduce_state(cpv0, bf, bp, test=True)
@@ -80,13 +62,13 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
     # ld = len(vm[:,0])
     celts = np.zeros(lc, dtype=np.complex128)
     delts = np.zeros(ld, dtype=np.complex128)
-    print('Finding creation matrix elts.')
+    log('Finding creation matrix elts.')
 
     for i in tqdm(range(lc)):
         v = bp.get_vec(vp[:, i], sparse=False)
         # v = vp[:, i]
         celts[i] = np.vdot(v, cpv0)
-    print('Finding annihilation matrix elts.')
+    log('Finding annihilation matrix elts.')
     for j in tqdm(range(ld)):
         v = bm.get_vec(vm[:, j], sparse=False)
         # v = vm[:, j]
@@ -95,7 +77,7 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
 
 
 def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
-                      eta=None):
+                      eta=None, couplings=None, subtract_ef=False):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -104,17 +86,17 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op_2(L, G, ks, basis, rescale_g=True)
-    hp = ham_op_2(L, G, ks, basisp, rescale_g=True)
-    hm = ham_op_2(L, G, ks, basism, rescale_g=True)
+    h = ham_op_2(L, G, ks, basis, couplings=couplings)
+    hp = ham_op_2(L, G, ks, basisp, couplings=couplings)
+    hm = ham_op_2(L, G, ks, basism, couplings=couplings)
     if n_states == -999:
         if G != -999:
             e, v = h.eigsh(k=1, which='SA')
         else:
-            print('Probably degenerate ground state')
+            log('Probably degenerate ground state')
             e, v = h.eigh()
-            print('Energies:')
-            print(e)
+            log('Energies:')
+            log(e)
         e0 = e[0]
         v0 = basis.get_vec(v[:,0], sparse=False)
         # e, v = h.eigh()
@@ -126,19 +108,20 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
         v0 = basis.get_vec(v[:,0], sparse=False)
         ep, vp = hp.eigsh(k=n_states, which='SA')
         em, vm = hm.eigsh(k=n_states, which='SA')
-    mu = (ep[0] - em[0])/2
-    print('Fermi energy: {}'.format(mu))
-    e0 -= N*mu
-    ep -= (N+1)*mu
-    em -= (N-1)*mu
+    if subtract_ef:
+        mu = (ep[0] - em[0])/2
+        # log('Fermi energy: {}'.format(mu))
+        e0 -= N*mu
+        ep -= (N+1)*mu
+        em -= (N-1)*mu
 
     celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
-    print('Largest matrix elements: Creation')
-    print(np.max(celts))
-    print(np.argmax(celts))
-    print('Annihilation')
-    print(np.max(delts))
-    print(np.argmax(delts))
+    log('Largest matrix elements: Creation')
+    log(np.max(celts))
+    log(np.argmax(celts))
+    log('Annihilation')
+    log(np.max(delts))
+    log(np.argmax(delts))
 
     if np.shape(steps) == ():
         ak_plus = np.zeros(steps)
@@ -161,6 +144,7 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
     ns = find_nk(L, v[:,0], basis)
     return ak_plus, ak_minus, omegas, ns
 
+
 def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
                       eta=None):
     Nup = N//2
@@ -171,9 +155,9 @@ def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op_2(L, -999, ks, basis, rescale_g=True)
-    hp = ham_op_2(L, -999, ks, basisp, rescale_g=True)
-    hm = ham_op_2(L, -999, ks, basism, rescale_g=True)
+    h = ham_op_2(L, -999, ks, basis)
+    hp = ham_op_2(L, -999, ks, basisp)
+    hm = ham_op_2(L, -999, ks, basism)
 
     es, v = h.eigh()
 
@@ -187,7 +171,7 @@ def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
         if np.abs(e - es[0]) < 10**-8:
             v00 += v[:, i]
             n_zero += 1
-    print('{} out of {} states have degenerate energy'.format(n_zero, len(es)))
+    log('{} out of {} states have degenerate energy'.format(n_zero, len(es)))
     e0 = es[0] # should be zero
     if n_zero == 1: # nondegenerate g.s.
         v00 = v[:,0]
@@ -200,18 +184,18 @@ def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
     em, vm = hm.eigh()
 
     mu = (ep[0] - em[0])/2
-    print('Fermi energy: {}'.format(mu))
+    log('Fermi energy: {}'.format(mu))
     e0 -= N*mu
     ep -= (N+1)*mu
     em -= (N-1)*mu
 
     celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
-    print('Largest matrix elements: Creation')
-    print(np.max(celts))
-    print(np.argmax(celts))
-    print('Annihilation')
-    print(np.max(delts))
-    print(np.argmax(delts))
+    log('Largest matrix elements: Creation')
+    log(np.max(celts))
+    log(np.argmax(celts))
+    log('Annihilation')
+    log(np.max(delts))
+    log(np.argmax(delts))
 
     if np.shape(steps) == ():
         ak_plus = np.zeros(steps)
@@ -234,25 +218,26 @@ def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
     ns = find_nk(L, v00, basis)
     return ak_plus, ak_minus, omegas, ns
 
+
 def check_nonint_spectral_fun(L, N, disp, steps=1000):
     ks = np.arange(L, 2*L)
     plt.figure(figsize=(12, 8))
     colors = ['orange', 'blue', 'pink', 'red','cyan','yellow','magenta','purple']
     # omegas = np.linspace(0, 1.5*np.max(disp), steps)
     for i, k in enumerate(ks):
-        print('')
+        log('')
         ap, am, om, ns = find_spectral_fun(L, N, 0, disp, steps, k=k)
         a1 = ap + am
         peak_i = np.argmax(a1)
         peak_om = om[peak_i]
-        print('Omega at peak value:')
-        print(peak_om)
-        print('This should be:')
-        print(disp[k-L])
-        print('omega - epsilon_k:')
-        print(peak_om - disp[k-L])
-        print('Integral')
-        print(np.trapz(a1, om))
+        log('Omega at peak value:')
+        log(peak_om)
+        log('This should be:')
+        log(disp[k-L])
+        log('omega - epsilon_k:')
+        log(peak_om - disp[k-L])
+        log('Integral')
+        log(np.trapz(a1, om))
         plt.scatter(om, ap, label = '{}th level, A^+'.format(k), color=colors[i%len(colors)], marker='^')
         plt.scatter(om, am, label = '{}th level, A^-'.format(k), color=colors[i%len(colors)], marker='v')
         plt.axvline(disp[i], color=colors[i%len(colors)])
@@ -291,7 +276,7 @@ def lanczos(v0, H, order, k=None, re_orth=True):
         alphas[i] = np.vdot(hv, v)
         w = hv - beta * last_v - alphas[i] * v
         if re_orth and i > 0:
-            print('Reorthonormalizing {} vectors!'.format(i))
+            log('Reorthonormalizing {} vectors!'.format(i))
             for j in range(i):
                 tau = lvs[:, j] # already normalized
                 coeff = np.vdot(w, tau)
@@ -300,20 +285,20 @@ def lanczos(v0, H, order, k=None, re_orth=True):
         if i + 1 < order:
             betas[i+1] = np.linalg.norm(w)
             if betas[i+1] < 10**-6 and i > 2:
-                print('{}th beta too small'.format(i+1))
-                print(beta)
+                log('{}th beta too small'.format(i+1))
+                log(beta)
                 stop = True
             else:
                 lvs[:, i+1] = w/betas[i+1]
             evals = np.sort(eigh_tridiagonal(alphas[:i+1], betas[1:i+1], eigvals_only=True))
-            print('{}th step: ground state converged?'.format(i))
+            log('{}th step: ground state converged?'.format(i))
             cvg = np.abs((evals[0] - last_lambda)/evals[0])
-            print(cvg)
-            print('Beta? {}'.format(betas[i+1]))
+            log(cvg)
+            log('Beta? {}'.format(betas[i+1]))
             if i >= k:
-                print('{}th step: change in {}th eigenvalue'.format(i, k))
+                log('{}th step: change in {}th eigenvalue'.format(i, k))
                 cvg2 = np.abs(evals[k] - last_other)/evals[k]
-                print(cvg2)
+                log(cvg2)
                 last_other = evals[k]
                 if cvg2 < 10**-12:
                     # converged=True
@@ -328,22 +313,22 @@ def lanczos_coeffs(v0, h, op, full_basis, target_basis, order,
                    k=None, max_digits=None):
     op_v0 = op.dot(v0)
     if np.linalg.norm(op_v0) < 10**-12:
-        print('Woops, null vector!')
+        log('Woops, null vector!')
         return np.zeros(order), np.zeros(order)
-    print('Initial state created. Reducing to smaller basis')
+    log('Initial state created. Reducing to smaller basis')
     v = reduce_state(op_v0, full_basis, target_basis, test=True)
 
-    print('Performing {}th order Lanczos algorithm'.format(k))
+    log('Performing {}th order Lanczos algorithm'.format(k))
     alphas, betas, vec = lanczos(v, h, order, k=k)
     if k is not None:
         alphas = alphas[:k]
         betas = betas[:k-1]
     es, vs = eigh_tridiagonal(alphas, betas)
     coeffs = np.abs(vs[0, :])**2 # first entries squared
-    print('Lanczos coefficients')
-    print(np.round(coeffs, 5))
-    print('Eigenvalues')
-    print(es)
+    log('Lanczos coefficients')
+    log(np.round(coeffs, 5))
+    log('Eigenvalues')
+    log(es)
     if max_digits is not None:
         # return np.round(coeffs, max_digits), np.round(es, max_digits)
         coeffs[np.abs(coeffs) < 10**-max_digits] = 0
@@ -351,21 +336,22 @@ def lanczos_coeffs(v0, h, op, full_basis, target_basis, order,
     return coeffs, es
 
 
-def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000):
+def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000, couplings=None,
+                eta=None):
 
     Nup = N//2
     Ndown = N//2
     if kf is None:
         kf = L + Nup//2
-    print('Recommended: kf = {}'.format(L + Nup//2))
-    print('Given: kf = {}'.format(kf))
+    log('Recommended: kf = {}'.format(L + Nup//2))
+    log('Given: kf = {}'.format(kf))
     basis = form_basis(2*L, Nup, Ndown)
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op(L, G, ks, basis, rescale_g=True)
-    hp = ham_op(L, G, ks, basisp, rescale_g=True)
-    hm = ham_op(L, G, ks, basism, rescale_g=True)
+    h = ham_op_2(L, G, ks, basis, couplings=couplings)
+    hp = ham_op_2(L, G, ks, basisp, couplings=couplings)
+    hm = ham_op_2(L, G, ks, basism, couplings=couplings)
     e, v = h.eigsh(k=1, which='SA')
     ef, _ = h.eigsh(k=1, which='LA')
 
@@ -373,13 +359,13 @@ def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000):
     ef = ef[0]
     v0 = basis.get_vec(v[:,0], sparse=False)
 
-    print('')
+    log('')
     kl = [[1.0, kf]]
     cl = [['+|', kl]]
     dl = [['-|', kl]]
 
-    print('')
-    print('Performing Lanczos for c^+')
+    log('')
+    log('Performing Lanczos for c^+')
     if Nup < 4*L - 2:
         dim_up = binom(4*L, Nup+1)*binom(4*L, Ndown)
         # up_order = min(dim_up//2, order)
@@ -391,11 +377,11 @@ def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000):
                                              k=up_ev, max_digits=10)
         coeffs_plus, e_plus = coeffs_plus[:up_ev], e_plus[:up_ev]
     else:
-        print('Woops, too many fermions, raising will mess things up!')
+        log('Woops, too many fermions, raising will mess things up!')
         coeffs_plus, e_plus = np.zeros(order), np.zeros(order)
-    print('')
-    print('Performing Lanczos for c^-')
-    print('')
+    log('')
+    log('Performing Lanczos for c^-')
+    log('')
     if Nup > 1:
         dim_down = binom(4*L, Nup-1)*binom(4*L, Ndown)
         # down_order = min(dim_down//2, order)
@@ -407,8 +393,9 @@ def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000):
                                                k=down_ev, max_digits=10)
         coeffs_minus, e_minus = coeffs_minus[:down_ev], e_minus[:down_ev]
     else:
-        print('Woops, not enough fermions.')
+        log('Woops, not enough fermions.')
         coeffs_minus, e_minus = np.zeros(L), np.zeros(L)
+
     if np.shape(steps) == ():
         aks_p = np.zeros(steps)
         aks_m = np.zeros(steps)
@@ -426,7 +413,10 @@ def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000):
     else:
         omegas = steps
         aks_p, aks_m = np.zeros(len(omegas)), np.zeros(len(omegas))
-    epsilon = np.mean(np.diff(omegas))
+    if eta is None:
+        epsilon = np.mean(np.diff(omegas))
+    else:
+        epsilon = eta
     #epsilon = 0.1
     for i, o in enumerate(omegas):
         aks_p[i], aks_m[i] = akboth(o, coeffs_plus/2, coeffs_minus/2,
@@ -454,8 +444,8 @@ def method_comparison_plots(params=None):
     dimH = binom(2*L, N//2)**2
 
 
-    print('Hilbert space dimension:')
-    print(dimH)
+    log('Hilbert space dimension:')
+    log(dimH)
     colors = ['blue','magenta','green','orange','purple','red','cyan']
     styles = [':', '-.', '--']
     xmin = 0
@@ -491,6 +481,9 @@ def plot_multiple_ks():
     L = int(input('L: '))
     N = int(input('N: '))
     u = float(input('u: '))
+    eta = float(input('eta: '))
+    if eta < 0:
+        eta = None
     if u != -999:
         G = 2.*u/L
     else:
@@ -502,7 +495,6 @@ def plot_multiple_ks():
     ks = np.array([(2*i+1)*np.pi/(L) for i in range(L//2)]) # actually only the positive ones
     steps = 1000
 
-    # check_nonint_spectral_fun(L, N, ks, steps=1000)
     colors = ['red','orange','magenta','pink']
     styles = [':', '-.', '--']
     xmin = 0
@@ -514,8 +506,10 @@ def plot_multiple_ks():
         print('***********************************')
         print('Full diagonalization for k = {}:'.format(k))
         print('')
-        # a_plus, a_minus, os, ns = find_spectral_fun(L//2, N, G, ks, steps, k=ki, eta=0.1)
-        a_plus, a_minus, os, ns = find_degenerate_spectral_fun(L//2, N, ks, steps, k=ki, eta=0.1)
+        if G != -999:
+            a_plus, a_minus, os, ns = find_spectral_fun(L//2, N, G, ks, steps, k=ki, eta=0.1)
+        else:
+            a_plus, a_minus, os, ns = find_degenerate_spectral_fun(L//2, N, ks, steps, k=ki, eta=0.1)
         plt.plot(os, a_minus+a_plus, color=colors[i%len(colors)], label='k = {}'.format(np.round(k,2)))
         # plt.scatter(os, a_minus, label='A^-, k = {}'.format(np.round(k, 2)), marker='v', color=colors[i%len(colors)])
         # plt.scatter(os, a_plus, label='A^+, k = {}'.format(np.round(k,2)), marker='^', color=colors[i%len(colors)])
@@ -529,7 +523,7 @@ def plot_multiple_ks():
     plt.xlabel('omega')
     plt.ylabel('A(k, omega)')
     # plt.xlim(xmin, xmax)
-    plt.title('L = {}, N = {}, u/t = infinity'.format(L, N))
+    plt.title('L = {}, N = {}, u/t = {}'.format(L, N, u))
     plt.legend()
 
 
@@ -545,8 +539,10 @@ def plot_multiple_ks():
         plt.xlabel('k')
         plt.ylabel('<n_k>')
         plt.show()
+    else:
+        return
 
-def analyze_spectral_guys(L, N, G, ks, k=None):
+def plot_spectral_functions(L, N, G, ks, k=None):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -555,9 +551,9 @@ def analyze_spectral_guys(L, N, G, ks, k=None):
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op_2(L, G, ks, basis, rescale_g=True)
-    hp = ham_op_2(L, G, ks, basisp, rescale_g=True)
-    hm = ham_op_2(L, G, ks, basism, rescale_g=True)
+    h = ham_op_2(L, G, ks, basis)
+    hp = ham_op_2(L, G, ks, basisp)
+    hm = ham_op_2(L, G, ks, basism)
     e, v = h.eigsh(k=1, which='SA')
     e0 = e[0]
     v0 = basis.get_vec(v[:,0], sparse=False)
@@ -618,7 +614,7 @@ if __name__ == '__main__':
     G = 0.5
     ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)]) # actually only the positive ones
     kf = L + N//4
-    analyze_spectral_guys(L, N, G, ks, k=kf)
+    plot_spectral_functions(L, N, G, ks, k=kf)
     # params = {'L': 6, 'N': 6, 'G': 2./3, 'kf': 6}
     # method_comparison_plots(params=params)
     # plot_multiple_ks()
