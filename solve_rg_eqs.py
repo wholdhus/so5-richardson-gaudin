@@ -11,13 +11,17 @@ from utils import * # There are a lot of boring functions in this other file
 
 VERBOSE=True
 FORCE_GS=True
-TOL=10**-11
+TOL=10**-9
 TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
 JOBS = max(CPUS//2, 2)
-MAX_STEPS = 100 * JOBS 
+if CPUS > 10:
+    # NOT MY LAPTOP, WILLING TO WAIT A WHILE
+    MAX_STEPS = 1000 * JOBS 
+else:
+    MAX_STEPS = 10 * JOBS
 
 lmd = {'maxiter': MAXIT,
        'xtol': TOL,
@@ -123,7 +127,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs,
 
 
 def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
-                          use_k_guess=False, factor=1.1, force_gs=True,
+                          use_k_guess=False, factor=1.05, force_gs=True,
                           noise_factors=None):
     vars0 = vars
     L, Ne, Nw = dims
@@ -510,10 +514,10 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     # i += 1
                     er = 1 # so we decrease step size
             if er < TOL and dg < 10**-2:
-                print('Changing dg from {} to {}'.format(dg, dg*2))
+                print('Increasing dg from {} to {}'.format(dg, dg*2))
                 dg *= 2 # we can take bigger steps
             elif er > TOL2 and dg > min_dg:
-                print('Changing dg from {} to {}'.format(dg, dg*0.5))
+                print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
                 g_prev = g - dg*np.sign(gf) # resetting to last value
                 dg *= 0.1
                 print('Stepping back from {} to {}'.format(g, g_prev))
@@ -548,7 +552,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print('Now incrementing 1/g!')
     q0 = 1./gf
     qf = 1./(G_to_g(Gf, k))
-    min_dq = np.abs(q0 - qf) / 10**5 # Taking at most 10**5 steps
+    min_dq = np.abs(q0 - qf) / 10**4 # Taking at most 10**5 steps
     log('Final q: {}'.format(qf))
     dq = dg0
     i = 0
