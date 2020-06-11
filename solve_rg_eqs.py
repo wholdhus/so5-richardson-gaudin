@@ -370,22 +370,17 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     L, Ne, Nw = dims
     N = Ne + Nw
     gf = G_to_g(Gf, k)
-    Gs = np.linspace(g0 * np.sign(Gf), Gf, int(np.abs(Gf/dg)))
-    gs = G_to_g(Gs, k)
-    # gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
-    # print(gs)
+
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
-    log('Initial guesses:')
-    es, ws = unpack_vars(vars, Ne, Nw)
-    print(es)
-    print(ws)
+
     keep_going = True
     i = 0
     varss = []
     gss = []
-    while keep_going and g != gf:
+    g = g0*np.sign(gf)
+    while keep_going and np.abs(g) <= np.abs(gf):
         log('g = {}'.format(g))
         if i == 0:
             print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
@@ -396,6 +391,9 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('Failed at the initial step.')
                 print('Quitting without output')
                 return
+            print('')
+            print('Now incrementing from g = {} to {}'.format(g0, gf))
+            print('')
         else:
             sol = root(rgEqs, vars, args=(kc, g, dims),
                        method='lm', options=lmd, jac=rg_jac)
@@ -404,12 +402,12 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
             ces, cws = unpack_vars(vars, Ne, Nw)
-            if i % skip == 0 or g == gf and i > 0:
+            if i % skip == 0 or np.abs(g - gf) < TOL2:
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                                steps=10*L,
-                                                max_steps=5)
+                                                  steps=10*L, max_steps=5,
+                                                  force_gs=False)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
                     log(es)
@@ -420,11 +418,11 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     log('Failed while incrementing im part')
                     log('Continuing....')
                     # er = 1 # so we decrease step size
-            if er < TOL and dg < 10**-2:
-                print('Changing dg from {} to {}'.format(dg, dg*2))
+            if er < TOL and dg < .1*gf:
+                print('Increasing dg from {} to {}'.format(dg, dg*2))
                 dg *= 2 # we can take bigger steps
             elif er > TOL2 and dg > min_dg:
-                print('Changing dg from {} to {}'.format(dg, dg*0.5))
+                print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
                 g_prev = g - dg*np.sign(gf) # resetting to last value
                 dg *= 0.1
                 print('Stepping back from {} to {}'.format(g, g_prev))
@@ -447,15 +445,18 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 g += dg * np.sign(gf)
         except Exception as e:
             print('Error during g incrementing')
-            # print(e)
+            print(e)
             print('Quitting the g increments')
             keep_going=False
     varss = np.array(varss)
+    gs = np.array(gss)
+    if len(gss) == 0:
+        print('Failed with no data')
+        return
     if not keep_going:
         print('Terminated at g = {}'.format(g))
-        gs = gs[:i-1]
-        gf = gs[-1]
-        varss = varss[:, :i-1]
+        gf = g
+        # varss = varss[:, :i-1]
     print('')
     print('Final error:')
     print(er)
@@ -486,10 +487,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
-    log('Initial guesses:')
-    es, ws = unpack_vars(vars, Ne, Nw)
-    print(es)
-    print(ws)
+
     keep_going = True
     i = 0
     varss = []
@@ -543,7 +541,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     log('Continuing....')
                     # i += 1
                     er = 1 # so we decrease step size
-            if er < TOL and dg < 10**-2:
+            if er < TOL and dg < .1*gf:
                 print('Changing dg from {} to {}'.format(dg, dg*2))
                 dg *= 2 # we can take bigger steps
             elif er > TOL2 and dg > min_dg:
@@ -615,7 +613,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             """
             Changing step sizes if appropriate
             """
-            if er < TOL and dq < 10**-2: # Let's allow larger steps for q
+            if er < TOL and dq < .1*qf: # Let's allow larger steps for q
                 print('Changing dq from {} to {}'.format(dq, 2*dq))
                 dq *= 2
             elif er > TOL2 and dq > min_dq:
