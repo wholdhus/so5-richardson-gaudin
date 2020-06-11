@@ -184,6 +184,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS,
     prev_vars = vars
     prev_s = s
     while s > 0:
+        log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -232,6 +233,7 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
     prev_vars = vars
     prev_s = s
     while s > 0:
+        log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -411,7 +413,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                                  steps=10*L, max_steps=5,
+                                                  steps=100, max_steps=5,
                                                   force_gs=False)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
@@ -533,7 +535,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                                steps=10*L,
+                                                steps=100,
                                                 max_steps=5,
                                                 force_gs=False)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
@@ -606,7 +608,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 try:
                     log('Removing im(k) at q = {}'.format(q))
                     vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
-                                                    steps=10*L)
+                                                    steps=100)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     gss += [g]
                     varss += [vars_r]
