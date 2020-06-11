@@ -79,7 +79,8 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
 def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
                       eta=None, couplings=None, subtract_ef=False,
                       combine_states=True,
-                      diags=True):
+                      diags=True,
+                      savefile=None):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -133,6 +134,10 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
         em -= (N-1)*mu
 
     celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
+    if savefile is not None:
+        log('Saving matrix elements to file')
+        np.save(savefile+'_plus', np.array([celts, ep]))
+        np.save(savefile+'_minus', np.array([delts, em]))
     log('Largest matrix elements: Creation')
     log(np.max(celts))
     log(np.argmax(celts))

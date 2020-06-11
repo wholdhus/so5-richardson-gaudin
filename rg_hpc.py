@@ -58,10 +58,10 @@ dims = (L, Ne, Nw)
 
 if Gf > 0:
     vars_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                            imscale_v=imv, skip=min(10, L))
+                            imscale_v=imv, skip=4)
 else:
     vars_df = solve_rgEqs(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                          imscale_v=imv, skip=min(10, L))
+                          imscale_v=imv, skip=4)
 
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'antiperiodic/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))
