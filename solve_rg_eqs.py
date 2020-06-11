@@ -336,7 +336,7 @@ def ioms(es, g, ks, extra_bits=False):
 Code for getting observables from the pairons
 """
 
-def calculate_energies(varss, gs, ks, Ne):
+def calculate_energies(varss, gs, ks, Ne, diagonal_terms=True):
     energies = np.zeros(len(gs))
     Rs = np.zeros((len(gs), len(ks)))
     log('Calculating R_k, energy')
@@ -345,7 +345,9 @@ def calculate_energies(varss, gs, ks, Ne):
         R = ioms(ces, g, ks)
         Rs[i, :] = np.real(R)
         # log(R)
-        const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
+        const = 0
+        if diagonal_terms:
+            const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
         energies[i] = np.sum(ks*np.real(R))*2/(1 + g*np.sum(ks)) - const
         # log(energies[i])
     return energies, Rs
@@ -368,7 +370,7 @@ Code for getting pairons and observables
 """
 
 def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                  imscale_v=0.001, skip=4):
+                imscale_v=0.001, skip=4, diagonal_terms=True):
     L, Ne, Nw = dims
     N = Ne + Nw
     gf = G_to_g(Gf, k)
@@ -407,6 +409,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             elif i % skip == 0 or g == gf and i > 0:
                 log('Removing im(k) at g = {}'.format(g))
                 try:
+                    log('Removing im(k) at g = {}'.format(g))
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
                                                 steps=10*L,
                                                 max_steps=JOBS)
@@ -417,9 +420,8 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     print(ws)
                     gss += [g]
                     log('Stored values at {}'.format(g))
-                except Exception as e:
-                    print('Failed to remove im k')
-                    print('Moving on...')
+                except:
+                    log('Failed to remove im(k). Moving forward')
             i += 1
         except Exception as e:
             print('Error during g incrementing')
@@ -443,7 +445,8 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         output_df['Im(e_{})'.format(n)] = varss[:, n+Ne]
         output_df['Re(omega_{})'.format(n)] = varss[:, n+2*Ne]
         output_df['Im(omega_{})'.format(n)] = varss[:, n+3*Ne]
-    output_df['energy'], Rs = calculate_energies(np.transpose(varss), gss, k, Ne)
+    output_df['energy'], Rs = calculate_energies(np.transpose(varss), gss, k, Ne,
+                                                 diagonal_terms=diagonal_terms)
     dRs, nks = calculate_n_k(Rs, gss)
     for n in range(L):
         output_df['R_{}'.format(n)] = Rs[:, n]

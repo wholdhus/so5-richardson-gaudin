@@ -1,4 +1,4 @@
-VERBOSE = True
+VERBOSE = False
 
 import numpy as np
 
