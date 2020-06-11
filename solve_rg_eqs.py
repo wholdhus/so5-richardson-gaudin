@@ -384,9 +384,6 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     varss = []
     gss = []
 
-    if len(gs)//skip < 10:
-        skip = 1
-
     g = g0*np.sign(gf)
     while keep_going and np.abs(g) <= np.abs(gf):
         log('g = {}'.format(g))
@@ -516,6 +513,9 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('Failed at the initial step.')
                 print('Quitting without output')
                 return
+            print('')
+            print('Now incrementing from g = {} to {}'.format(g0, gf))
+            print('')
         else:
             sol = root(rgEqs, vars, args=(kc, g, dims),
                        method='lm', options=lmd, jac=rg_jac)
@@ -586,6 +586,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     q0 = 1./gf
     qf = 1./(G_to_g(Gf, k))
     min_dq = np.abs(q0 - qf) / 10**4 # Taking at most 10**5 steps
+    max_dq = np.abs(q0 - qf) * 10**-2 # taking at least 10
     log('Final q: {}'.format(qf))
     dq = dg0
     i = 0
@@ -618,7 +619,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             """
             Changing step sizes if appropriate
             """
-            if er < TOL and dq < .1*qf: # Let's allow larger steps for q
+            if er < TOL and dq < max_dq: # Let's allow larger steps for q
                 print('Changing dq from {} to {}'.format(dq, 2*dq))
                 dq *= 2
             elif er > TOL2 and dq > min_dq:

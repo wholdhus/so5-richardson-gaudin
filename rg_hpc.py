@@ -23,6 +23,9 @@ Ne = N//2
 Nw = N//2
 
 dg = 0.005/L
+if Gf < 0:
+    dg *= 10 # works better this way?
+
 g0 = .01*dg
 imk = dg
 imk = dg
