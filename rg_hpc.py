@@ -1,6 +1,6 @@
 import sys
 import pandas as pd
-from solve_rg_eqs import np, solve_rgEqs_2, G_to_g, solve_rgEqs
+from solve_rg_eqs import np, solve_rgEqs, solve_rgEqs_2, G_to_g
 import json
 
 try:
@@ -22,7 +22,7 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-dg = 0.04/L
+dg = 0.005/L
 g0 = .01*dg
 imk = dg
 imk = dg
