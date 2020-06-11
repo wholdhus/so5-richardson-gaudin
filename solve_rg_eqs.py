@@ -385,43 +385,71 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     i = 0
     varss = []
     gss = []
-    while i<len(gs) and keep_going:
-        g = gs[i]
+    while keep_going and g != gf:
+        log('g = {}'.format(g))
         if i == 0:
-            print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
-            sol = bootstrap_g0(dims, g, kc, imscale_v)
+            print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
+            try:
+                sol = bootstrap_g0(dims, g, kc, imscale_v)
+                vars = sol.x
+            except:
+                print('Failed at the initial step.')
+                print('Quitting without output')
+                return
         else:
-            sol = find_root_multithread(vars, kc, g, dims, imscale_v,
-                                        max_steps=JOBS//4, # if we loose it here, we don't get it back usually
-                                        force_gs=False)
+            sol = root(rgEqs, vars, args=(kc, g, dims),
+                       method='lm', options=lmd, jac=rg_jac)
         try:
+            prev_vars = vars # so we can revert if needed
             vars = sol.x
             er = max(abs(rgEqs(vars, kc, g, dims)))
-            if er > 0.001 and i > 1:
-                print('This is too bad')
-                return
             ces, cws = unpack_vars(vars, Ne, Nw)
-            if i == 0:
-                pass
-            elif i % skip == 0 or g == gf and i > 0:
+            if i % skip == 0 or g == gf and i > 0:
+                log('Removing im(k) at g = {}'.format(g))
                 try:
-                    log('Removing im(k) at g = {}'.format(g))
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
                                                 steps=10*L,
-                                                max_steps=JOBS)
-                    varss += [vars_r]
+                                                max_steps=5)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
-                    print('Variables after removing im(k)')
-                    print(es)
-                    print(ws)
+                    log('Variables after removing im(k)')
+                    log(es)
+                    log(ws)
+                    varss += [vars_r]
                     gss += [g]
-                    log('Stored values at {}'.format(g))
-                except:
-                    log('Failed to remove im(k). Moving forward')
-            i += 1
+                except Exception as e:
+                    log('Failed while incrementing im part')
+                    log('Continuing....')
+                    # er = 1 # so we decrease step size
+            if er < TOL and dg < 10**-2:
+                print('Changing dg from {} to {}'.format(dg, dg*2))
+                dg *= 2 # we can take bigger steps
+            elif er > TOL2 and dg > min_dg:
+                print('Changing dg from {} to {}'.format(dg, dg*0.5))
+                g_prev = g - dg*np.sign(gf) # resetting to last value
+                dg *= 0.1
+                print('Stepping back from {} to {}'.format(g, g_prev))
+                g = g_prev
+                vars = prev_vars
+            elif er > 10*TOL2 and dg < min_dg:
+                print('Very high error: {}'.format(er))
+                print('Cannot make dg smaller!')
+                print('Stopping!')
+                keep_going = False
+            if np.abs(g - gf) < TOL2:
+                print('At gf')
+                keep_going = False
+            elif np.abs(g - gf) < 1.5*dg: # close enough
+                print('Close enough to gf')
+                g = gf
+                i += 1
+            else:
+                i += 1
+                g += dg * np.sign(gf)
         except Exception as e:
             print('Error during g incrementing')
-            keep_going = False
+            # print(e)
+            print('Quitting the g increments')
+            keep_going=False
     varss = np.array(varss)
     if not keep_going:
         print('Terminated at g = {}'.format(g))
