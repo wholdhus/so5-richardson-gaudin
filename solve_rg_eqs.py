@@ -19,7 +19,7 @@ CPUS = multiprocessing.cpu_count()
 JOBS = max(CPUS//2, 2)
 if CPUS > 10:
     # NOT MY LAPTOP, WILLING TO WAIT A WHILE
-    MAX_STEPS = 1000 * JOBS 
+    MAX_STEPS = 1000 * JOBS
 else:
     MAX_STEPS = 10 * JOBS
 
@@ -177,7 +177,7 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
 
 
 def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS,
-                   force_gs=True):
+                   force_gs=False):
     L, Ne, Nw = dims
     ds = 1./steps
     s = 1.0
@@ -219,8 +219,8 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS,
             s -= ds
     # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
-    sol = find_root_multithread(vars, kc, g, dims, 0,
-                                max_steps=MAX_STEPS)
+    sol = find_root_multithread(vars, kc, g, dims, .001/L,
+                                max_steps=5)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     return vars, er
@@ -622,10 +622,10 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             Changing step sizes if appropriate
             """
             if er < TOL and dq < max_dq: # Let's allow larger steps for q
-                print('Changing dq from {} to {}'.format(dq, 2*dq))
+                print('Increasing dq from {} to {}'.format(dq, 2*dq))
                 dq *= 2
             elif er > TOL2 and dq > min_dq:
-                print('Changing dq from {} to {}'.format(dq, 0.5*dq))
+                print('Decreasing dq from {} to {}'.format(dq, 0.5*dq))
                 q_prev = q - dq*np.sign(qf) # resetting to last value
                 dq *= 0.1
                 print('Stepping back from {} to {}'.format(q, q_prev))
