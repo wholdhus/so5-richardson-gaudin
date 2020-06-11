@@ -390,9 +390,11 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         skip = 1
     while i<len(gs) and keep_going:
         g = gs[i]
+        log('g = {}'.format(g))
         if i == 0:
             print('First, boostrapping from 4 to {} fermions'.format(Ne+Nw))
             sol = bootstrap_g0(dims, g, kc, imscale_v)
+            print('')
         else:
             sol = find_root_multithread(vars, kc, g, dims, imscale_v,
                                         max_steps=JOBS//4, # if we loose it here, we don't get it back usually
@@ -409,10 +411,10 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             elif i % skip == 0 or g == gf and i > 0:
                 log('Removing im(k) at g = {}'.format(g))
                 try:
-                    log('Removing im(k) at g = {}'.format(g))
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
                                                 steps=10*L,
-                                                max_steps=JOBS)
+                                                max_steps=min(5,JOBS//4),
+                                                force_gs=False)
                     varss += [vars_r]
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     print('Variables after removing im(k)')
@@ -436,6 +438,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print('')
     print('Final error:')
     print(er)
+    print('Recorded {} values'.format(len(gss)))
     gss = np.array(gss)
     output_df = pandas.DataFrame({})
     output_df['g'] = gss
@@ -505,7 +508,8 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
                                                 steps=10*L,
-                                                max_steps=5)
+                                                max_steps=5,
+                                                force_gs=False)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
                     log(es)
@@ -589,7 +593,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             """
             Changing step sizes if appropriate
             """
-            if er < TOL and dq < 10**-2: # Let's allow larger steps for q
+            if er < TOL and dq < 10**-1: # Let's allow larger steps for q
                 print('Changing dq from {} to {}'.format(dq, 2*dq))
                 dq *= 2
             elif er > TOL2 and dq > min_dq:
