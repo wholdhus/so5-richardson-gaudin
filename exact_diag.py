@@ -72,7 +72,8 @@ def casimir_dict(L, k1, factor):
     return {'static': static}
 
 
-def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None):
+def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None,
+                     diagonal_terms=True):
     if couplings is not None:
         GT, GS, GN = couplings
     else:
@@ -96,7 +97,7 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None):
         all_k += [[k[k1], p_k1], [k[k1], m_k1]]
 
         for k2 in range(L):
-            if k1 != k2:
+            if k1 != k2 or diagonal_terms:
                 Zkk = G*k[k1]*k[k2]
                 Xkk = Zkk
                 Xskk = Zkk
@@ -358,25 +359,28 @@ def make_plots():
     print(all_k)
 
 
-def ham_op(L, G, ks, basis, dtype=np.float64):
-
+def ham_op(L, G, ks, basis, dtype=np.float64,
+           diagonal_terms=True):
     g = G/(1-G*np.sum(ks))
     factor = 2/(1+g*np.sum(ks))
-
     for i in range(L):
-        cd = casimir_dict(L, i, factor = G*ks[i]**2)
-        co = quantum_operator(cd, basis=basis, dtype=dtype)
         id = iom_dict(L, g, ks, k1=i, mult=ks[i]*factor, kin=1)
         if i == 0:
             h = quantum_operator(id, basis=basis, dtype=dtype)
-            h -= co
         else:
             h += quantum_operator(id, basis=basis, dtype=dtype)
+        if diagonal_terms:
+            # cd = casimir_dict(L, i, factor = G*ks[i]**2)
+            cd = constant_op_dict(L, -3*G*ks[i]**2)
+            co = quantum_operator(cd, basis=basis, dtype=dtype)
             h -= co
+
     return h
 
-def ham_op_2(L, G, ks, basis, no_kin=False, couplings=None):
-    hd = hamiltonian_dict(L, G, ks, no_kin=no_kin, couplings=couplings)
+def ham_op_2(L, G, ks, basis, no_kin=False, couplings=None,
+             diagonal_terms=True):
+    hd = hamiltonian_dict(L, G, ks, no_kin=no_kin, couplings=couplings,
+                          diagonal_terms=diagonal_terms)
 
     h = quantum_operator(hd, basis=basis, check_herm=True)
     return h

@@ -77,7 +77,9 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
 
 
 def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
-                      eta=None, couplings=None, subtract_ef=False):
+                      eta=None, couplings=None, subtract_ef=False,
+                      combine_states=True,
+                      diags=True):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -86,12 +88,17 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op_2(L, G, ks, basis, couplings=couplings)
-    hp = ham_op_2(L, G, ks, basisp, couplings=couplings)
-    hm = ham_op_2(L, G, ks, basism, couplings=couplings)
+    if diags:
+        h = ham_op_2(L, G, ks, basis, couplings=couplings, diagonal_terms=diags)
+        hp = ham_op_2(L, G, ks, basisp, couplings=couplings, diagonal_terms=diags)
+        hm = ham_op_2(L, G, ks, basism, couplings=couplings, diagonal_terms=diags)
+    else:
+        h = ham_op(L, G, ks, basis)
+        hp = ham_op(L, G, ks, basisp)
+        hm = ham_op(L, G, ks, basism)
     if n_states == -999:
         if G != -999:
-            e, v = h.eigsh(k=1, which='SA')
+            e, v = h.eigh()
         else:
             log('Probably degenerate ground state')
             e, v = h.eigh()
@@ -99,15 +106,25 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
             log(e)
         e0 = e[0]
         v0 = basis.get_vec(v[:,0], sparse=False)
-        # e, v = h.eigh()
         ep, vp = hp.eigh()
         em, vm = hm.eigh()
     else:
-        e, v = h.eigsh(k=1, which='SA')
+        e, v = h.eigsh(k=n_states, which='SA')
         e0 = e[0]
         v0 = basis.get_vec(v[:,0], sparse=False)
         ep, vp = hp.eigsh(k=n_states, which='SA')
         em, vm = hm.eigsh(k=n_states, which='SA')
+    if combine_states:
+        n_zero = 0
+
+        v00 = np.zeros(basis.Ns, dtype=np.complex128)
+        for i, ei in enumerate(e):
+            if np.abs(ei - e0) < 10**-8:
+                v00 += v[:, i]
+                n_zero += 1
+        print('Combined {} degenerate states'.format(n_zero))
+        v0 = basis.get_vec(v00, sparse=False)
+        v0 *= 1./np.linalg.norm(v0)
     if subtract_ef:
         mu = (ep[0] - em[0])/2
         # log('Fermi energy: {}'.format(mu))
