@@ -1,6 +1,6 @@
 import sys
 import pandas as pd
-from solve_rg_eqs import np, solve_rgEqs_2, G_to_g
+from solve_rg_eqs import np, solve_rgEqs_2, G_to_g, solve_rgEqs
 import json
 
 try:
@@ -25,7 +25,9 @@ Nw = N//2
 dg = 0.04/L
 g0 = .01*dg
 imk = dg
-imv = .01*g0
+imk = dg
+# imv = g0
+imv = g0/L
 
 ks = np.arange(1, 2*L+1, 2)*0.5*np.pi/L
 
@@ -45,12 +47,21 @@ print('Spectrum')
 print(ks)
 print('Imaginary part of guesses')
 print(imv)
+print('dg')
+print(dg)
+print('g0')
+print(g0)
 print('')
+
 
 dims = (L, Ne, Nw)
 
-vars_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
-                        imscale_v=imv, skip=N)
+if Gf > 0:
+    vars_df = solve_rgEqs_2(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
+                            imscale_v=imv, skip=min(10, L))
+else:
+    vars_df = solve_rgEqs(dims, Gf, ks, dg=dg, g0=g0, imscale_k=imk,
+                          imscale_v=imv, skip=min(10, L))
 
 print('Done! Putting things in a CSV')
 vars_df.to_csv(RESULT_FP + 'antiperiodic/solutions_full_{}_{}_{}.csv'.format(L, N, np.round(Gf, 3)))

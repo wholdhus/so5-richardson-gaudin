@@ -375,18 +375,17 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     Gs = np.linspace(g0 * np.sign(Gf), Gf, int(np.abs(Gf/dg)))
     gs = G_to_g(Gs, k)
     # gs = np.linspace(g0*np.sign(gf), gf, int(np.abs(gf/dg)))
-    # print(gs)
+    print(gs)
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, g0, imscale=imscale_v)
-    log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    print(es)
-    print(ws)
     keep_going = True
     i = 0
     varss = []
     gss = []
+    if len(gs)//skip < 10:
+        skip = 1
     while i<len(gs) and keep_going:
         g = gs[i]
         if i == 0:
@@ -407,16 +406,20 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 pass
             elif i % skip == 0 or g == gf and i > 0:
                 log('Removing im(k) at g = {}'.format(g))
-                vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                            steps=10*L,
-                                            max_steps=JOBS)
-                varss += [vars_r]
-                es, ws = unpack_vars(vars_r, Ne, Nw)
-                print('Variables after removing im(k)')
-                print(es)
-                print(ws)
-                gss += [g]
-                log('Stored values at {}'.format(g))
+                try:
+                    vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
+                                                steps=10*L,
+                                                max_steps=JOBS)
+                    varss += [vars_r]
+                    es, ws = unpack_vars(vars_r, Ne, Nw)
+                    print('Variables after removing im(k)')
+                    print(es)
+                    print(ws)
+                    gss += [g]
+                    log('Stored values at {}'.format(g))
+                except Exception as e:
+                    print('Failed to remove im k')
+                    print('Moving on...')
             i += 1
         except Exception as e:
             print('Error during g incrementing')
@@ -427,6 +430,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         gs = gs[:i-1]
         gf = gs[-1]
         varss = varss[:, :i-1]
+    print('Done with g increments at g = {}'.format(g))
     print('')
     print('Final error:')
     print(er)
@@ -456,10 +460,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
-    log('Initial guesses:')
     es, ws = unpack_vars(vars, Ne, Nw)
-    print(es)
-    print(ws)
     keep_going = True
     i = 0
     varss = []
