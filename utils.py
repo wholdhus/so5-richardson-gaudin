@@ -78,7 +78,7 @@ def rgEqs(vars, k, g, dims):
     L, Ne, Nw = dims
 
     Zf = rationalZ
-    L = len(k)//2
+    # L = len(k)//2
 
     kr = k[:L]
     ki = k[L:]

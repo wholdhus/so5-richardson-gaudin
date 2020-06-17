@@ -386,8 +386,9 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     varss = []
     gss = []
 
-    g = g0*np.sign(gf)
-    while keep_going and np.abs(g) <= np.abs(gf):
+    G = g0*np.sign(Gf)
+    while keep_going and np.abs(G) <= np.abs(Gf):
+        g = G_to_g(G, k)
         log('g = {}'.format(g))
         if i == 0:
             print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
@@ -413,7 +414,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                                  steps=100, max_steps=5,
+                                                  steps=max(L, 10), max_steps=5,
                                                   force_gs=False)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
@@ -430,26 +431,25 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 dg *= 2 # we can take bigger steps
             elif er > TOL2 and dg > min_dg:
                 print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
-                g_prev = g - dg*np.sign(gf) # resetting to last value
-                dg *= 0.1
+                dg *= 0.5
                 print('Stepping back from {} to {}'.format(g, g_prev))
-                g = g_prev
+                G = G - dg*np.sign(Gf) # resetting to last value
                 vars = prev_vars
             elif er > 10*TOL2 and dg < min_dg:
                 print('Very high error: {}'.format(er))
                 print('Cannot make dg smaller!')
                 print('Stopping!')
                 keep_going = False
-            if np.abs(g - gf) < TOL2:
-                print('At gf')
+            if np.abs(G - Gf) < TOL2:
+                print('At Gf')
                 keep_going = False
-            elif np.abs(g - gf) < 1.5*dg: # close enough
+            elif np.abs(G - Gf) < 1.5*dg: # close enough
                 print('Close enough to gf')
-                g = gf
+                G = Gf
                 i += 1
             else:
                 i += 1
-                g += dg * np.sign(gf)
+                G += dg * np.sign(Gf)
         except Exception as e:
             print('Error during g incrementing')
             print(e)
@@ -535,9 +535,9 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 log('Removing im(k) at g = {}'.format(g))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
-                                                steps=100,
-                                                max_steps=5,
-                                                force_gs=False)
+                                                  steps=max(L, 10),
+                                                  max_steps=5,
+                                                  force_gs=False)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
                     log(es)
@@ -549,12 +549,12 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                     log('Continuing....')
                     er = 1 # so we decrease step size
             if er < TOL and dg < .1*gf:
-                print('Changing dg from {} to {}'.format(dg, dg*2))
+                print('Increasing dg from {} to {}'.format(dg, dg*2))
                 dg *= 2 # we can take bigger steps
             elif er > TOL2 and dg > min_dg:
                 print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
                 g_prev = g - dg*np.sign(gf) # resetting to last value
-                dg *= 0.1
+                dg *= 0.5
                 print('Stepping back from {} to {}'.format(g, g_prev))
                 g = g_prev
                 vars = prev_vars
@@ -608,7 +608,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 try:
                     log('Removing im(k) at q = {}'.format(q))
                     vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
-                                                    steps=100)
+                                                    steps=max(L, 10))
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     gss += [g]
                     varss += [vars_r]
