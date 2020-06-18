@@ -81,8 +81,9 @@ def root_thread_job(vars, kc, g, dims, force_gs):
         k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2])) # the e_alpha should be around the ks
         if min_w < 0.5*kc[0] or k_distance > 10**-3:
             er = 1
-    if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
-        er = 2  # so I know why this is the error
+    if len(es) >= 12: # this doesn't happen for really small systems
+        if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
+            er = 2  # so I know why this is the error
     return sol, vars, er
 
 
@@ -135,13 +136,17 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
     L, Ne, Nw = dims
     prev_vars = vars
     sol = root(rgEqs, vars, args=(kc, g, dims),
-                   method='lm', jac=rg_jac, options=lmd)
+               method='lm', jac=rg_jac, options=lmd)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     es, ws = unpack_vars(vars, Ne, Nw)
     if min(abs(ws)) < 0.5*abs(kc[0]) and force_gs:
         print('Omega = 0 solution! Rerunning.')
         er = 1
+    elif len(es) >= 12: # this doesn't happen for really small systems
+        if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
+            er = 2  # so I know why this is the error
+            print('One of the e_alpha ran away! Rerunning.')
     tries = 1
 
     sols = [-999 for i in range(JOBS)]
