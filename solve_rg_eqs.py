@@ -76,11 +76,13 @@ def root_thread_job(vars, kc, g, dims, force_gs):
     es, ws = unpack_vars(vars, Ne, Nw)
     if force_gs:
         # Running checks to see if this is deviating from ground state solution
-        min_w = np.min(np.abs(ws))
+        min_w = np.min(np.abs(ws)) # none of the omegas should get too small
         k_cplx = kc[:L] + 1j*kc[L:]
-        k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2]))
+        k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2])) # the e_alpha should be around the ks
         if min_w < 0.5*kc[0] or k_distance > 10**-3:
             er = 1
+    if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
+        er = 2  # so I know why this is the error
     return sol, vars, er
 
 
@@ -127,7 +129,7 @@ def root_threads(prev_vars, noise_scale, kc, g, dims, force_gs,
 
 
 def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS,
-                          use_k_guess=False, factor=1.05, force_gs=True,
+                          use_k_guess=False, factor=1.01, force_gs=True,
                           noise_factors=None):
     vars0 = vars
     L, Ne, Nw = dims
