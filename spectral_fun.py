@@ -78,9 +78,10 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
 
 def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
                       eta=None, couplings=None, subtract_ef=False,
+                      exactly_solvable=True,
                       combine_states=True,
-                      diags=True,
                       savefile=None):
+    print(ks)
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -89,14 +90,10 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    if diags:
-        h = ham_op_2(L, G, ks, basis, couplings=couplings, diagonal_terms=diags)
-        hp = ham_op_2(L, G, ks, basisp, couplings=couplings, diagonal_terms=diags)
-        hm = ham_op_2(L, G, ks, basism, couplings=couplings, diagonal_terms=diags)
-    else:
-        h = ham_op(L, G, ks, basis)
-        hp = ham_op(L, G, ks, basisp)
-        hm = ham_op(L, G, ks, basism)
+    h = ham_op_2(L, G, ks, basis, couplings=couplings, exactly_solvable=True)
+    hp = ham_op_2(L, G, ks, basisp, couplings=couplings, exactly_solvable=True)
+    hm = ham_op_2(L, G, ks, basism, couplings=couplings, exactly_solvable=True)
+
     if n_states == -999:
         if G != -999:
             e, v = h.eigh()
@@ -126,9 +123,10 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
         print('Combined {} degenerate states'.format(n_zero))
         v0 = basis.get_vec(v00, sparse=False)
         v0 *= 1./np.linalg.norm(v0)
+    mu = 0
     if subtract_ef:
-        mu = (ep[0] - em[0])/2
-        # log('Fermi energy: {}'.format(mu))
+        mu = (ep[0] - e0)
+        log('Fermi energy: {}'.format(mu))
         e0 -= N*mu
         ep -= (N+1)*mu
         em -= (N-1)*mu

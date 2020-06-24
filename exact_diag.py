@@ -11,9 +11,9 @@ def form_basis(L, Nup, Ndown):
 
 
 def reduce_state(v, full_basis, target_basis, test=False):
-    # v *= 1./np.linalg.norm(v)
+    #  v *= 1./np.linalg.norm(v)
     fdim = len(v)
-    v_out = np.zeros(len(target_basis.states), dtype=np.complex128)
+    v_out = np.zeros(target_basis.Ns, dtype=np.complex128)
     for i, s in enumerate(target_basis.states):
         # full_ind = np.where(full_basis.states == s)[0][0]
         v_out[i] = v[fdim - s - 1]
@@ -73,14 +73,17 @@ def casimir_dict(L, k1, factor):
 
 
 def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None,
-                     diagonal_terms=True):
+                     exactly_solvable=True):
     if couplings is not None:
         GT, GS, GN = couplings
     else:
         GT, GS, GN = (1, 1, 1)
+    if not exactly_solvable:
+        GT *= 2
+        GS *= 2
     if G == -999:
         no_kin=True # easier to input this.
-        G = 1
+        G = -1
         print('Zero k.e. hamiltonian')
     G *= -1 # woops i had some sign ambiguities!
     # k should include positive and negative values
@@ -97,53 +100,59 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None,
         all_k += [[k[k1], p_k1], [k[k1], m_k1]]
 
         for k2 in range(L):
-            if k1 != k2 or diagonal_terms:
-                Zkk = G*k[k1]*k[k2]
-                Xkk = Zkk
-                Xskk = Zkk
-                Xckk = Zkk
-                if trig:
-                    Zkk = G*np.sin(k[k1]+k[k2])*np.cos(k[k1]-k[k2])
-                    Xkk = G*np.sin(k[k1]+k[k2])
-                    Xskk = G*Xkk*np.exp(1j*(k[k1]-k[k2]))
-                    Xckk = G*Xkk*np.exp(-1j*(k[k1]-k[k2]))
-                p_k2 = L + k2
-                m_k2 = L - (k2+1)
-                ppairing += [
-                             [Xkk*GT, p_k1, m_k1, m_k2, p_k2]
-                            ]
-                zpairing += [
-                             [.5*Xkk*GT, p_k1, p_k2, m_k1, m_k2],
-                             [.5*Xkk*GT, m_k1, m_k2, p_k1, p_k2],
-                             [-.5*Xkk*GT, p_k1, m_k2, m_k1, p_k2],
-                             [-.5*Xkk*GT, m_k1, p_k2, p_k1, m_k2]
-                            ]
-                s_c = 0.5*Xskk*GS
-                # s_c = Xskk*g_spin
-                spm += [
-                        [s_c, p_k1, p_k2, p_k1, p_k2],
-                        [s_c, p_k1, m_k2, p_k1, m_k2],
-                        [s_c, m_k1, p_k2, m_k1, p_k2],
-                        [s_c, m_k1, m_k2, m_k1, m_k2]
+            Zkk = G*k[k1]*k[k2]
+            Xkk = Zkk
+            Xskk = Zkk
+            Xckk = Zkk
+            if trig:
+                Zkk = G*np.sin(k[k1]+k[k2])*np.cos(k[k1]-k[k2])
+                Xkk = G*np.sin(k[k1]+k[k2])
+                Xskk = G*Xkk*np.exp(1j*(k[k1]-k[k2]))
+                Xckk = G*Xkk*np.exp(-1j*(k[k1]-k[k2]))
+            p_k2 = L + k2
+            m_k2 = L - (k2+1)
+            ppairing += [
+                         [Xkk*GT, p_k1, m_k1, m_k2, p_k2]
                         ]
-                sz_c = 0.25*Zkk*GS
-                d_c = 0.25*Zkk*GN
-                same_same += [[d_c + sz_c, p_k1, p_k2],
-                              [d_c + sz_c, p_k1, m_k2],
-                              [d_c + sz_c, m_k1, p_k2],
-                              [d_c + sz_c, m_k1, m_k2]
-                             ]
-                same_diff += [[2*(d_c - sz_c), p_k1, p_k2],
-                              [2*(d_c - sz_c), p_k1, m_k2],
-                              [2*(d_c - sz_c), m_k1, p_k2],
-                              [2*(d_c - sz_c), m_k1, m_k2]
-                             ]
+            zpairing += [
+                         [.5*Xkk*GT, p_k1, p_k2, m_k1, m_k2],
+                         [.5*Xkk*GT, m_k1, m_k2, p_k1, p_k2],
+                         [-.5*Xkk*GT, p_k1, m_k2, m_k1, p_k2],
+                         [-.5*Xkk*GT, m_k1, p_k2, p_k1, m_k2]
+                        ]
+            s_c = 0.5*Xskk*GS
+            # s_c = Xskk*g_spin
+            spm += [
+                    [s_c, p_k1, p_k2, p_k1, p_k2],
+                    [s_c, p_k1, m_k2, p_k1, m_k2],
+                    [s_c, m_k1, p_k2, m_k1, p_k2],
+                    [s_c, m_k1, m_k2, m_k1, m_k2]
+                    ]
+            sz_c = 0.25*Zkk*GS
+            d_c = 0.25*Zkk*GN
+            same_same += [[d_c + sz_c, p_k1, p_k2],
+                          [d_c + sz_c, p_k1, m_k2],
+                          [d_c + sz_c, m_k1, p_k2],
+                          [d_c + sz_c, m_k1, m_k2]
+                         ]
+            same_diff += [[2*(d_c - sz_c), p_k1, p_k2],
+                          [2*(d_c - sz_c), p_k1, m_k2],
+                          [2*(d_c - sz_c), m_k1, p_k2],
+                          [2*(d_c - sz_c), m_k1, m_k2]
+                         ]
     if no_kin:
         static = [
-                ['++--|', ppairing],
-                ['+-|+-', zpairing],
-                ['|++--', ppairing]
-                # ['+-|-+', spm]
+                  ['++--|', ppairing],
+                  ['+-|+-', zpairing],
+                  ['|++--', ppairing],
+                  ['+-|-+', spm]
+                ]
+    elif not exactly_solvable:
+        static = [['n|', all_k], ['|n', all_k],
+                  ['++--|', ppairing],
+                  ['+-|+-', zpairing],
+                  ['|++--', ppairing],
+                  ['+-|-+', spm]
                 ]
     else:
         static = [['n|', all_k], ['|n', all_k],
@@ -371,18 +380,17 @@ def ham_op(L, G, ks, basis, dtype=np.float64,
             h += quantum_operator(id, basis=basis, dtype=dtype)
         if diagonal_terms:
             # cd = casimir_dict(L, i, factor = G*ks[i]**2)
-            cd = constant_op_dict(L, -3*G*ks[i]**2)
+            cd = constant_op_dict(L, 3*G*ks[i]**2)
             co = quantum_operator(cd, basis=basis, dtype=dtype)
             h -= co
 
     return h
 
 def ham_op_2(L, G, ks, basis, no_kin=False, couplings=None,
-             diagonal_terms=True):
+             exactly_solvable=True):
     hd = hamiltonian_dict(L, G, ks, no_kin=no_kin, couplings=couplings,
-                          diagonal_terms=diagonal_terms)
-
-    h = quantum_operator(hd, basis=basis, check_herm=True)
+                          exactly_solvable=exactly_solvable)
+    h = quantum_operator(hd, basis=basis, check_herm=exactly_solvable)
     return h
 
 
