@@ -4,7 +4,6 @@ import numpy as np
 from tqdm import tqdm
 
 
-
 def form_basis(L, Nup, Ndown):
     basis = spinful_fermion_basis_1d(L, Nf=(Nup, Ndown))
     return basis
@@ -504,9 +503,9 @@ def quartet_wavefunction(L, N, basis, basisf):
             kj_m = L-j-1
             creation_lst += [[1, ki_p, ki_m, kj_p, kj_m], #T_1 T_-1
                              [1, kj_p, kj_m, ki_p, ki_m], #T_-1 T_1
-                             [-1, ki_p, kj_p, ki_m, kj_m],
+                             [-1, ki_p, kj_p, ki_m, kj_m], # -1
                              [+1, ki_p, kj_m, ki_m, kj_p],
-                             [-1, ki_m, kj_m, ki_p, kj_p],
+                             [-1, ki_m, kj_m, ki_p, kj_p], # -1
                              [+1, ki_m, kj_p, ki_p, kj_m]
                              ]
     creation_op = quantum_operator({'static': [['++|++', creation_lst]]}, basis=basisf,
@@ -550,10 +549,6 @@ def iso_wavefunction(L, N, basis, basisf):
         print(np.sum(nk))
     print('Now reducing to the N particle basis')
     return reduce_state(v, basisf, basis) # putting into the N particle basis
-
-
-
-
 
 
 if __name__ == '__main__':

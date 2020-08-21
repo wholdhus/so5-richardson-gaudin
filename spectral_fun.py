@@ -90,9 +90,9 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op_2(L, G, ks, basis, couplings=couplings, exactly_solvable=True)
-    hp = ham_op_2(L, G, ks, basisp, couplings=couplings, exactly_solvable=True)
-    hm = ham_op_2(L, G, ks, basism, couplings=couplings, exactly_solvable=True)
+    h = ham_op_2(L, G, ks, basis, couplings=couplings, exactly_solvable=exactly_solvable)
+    hp = ham_op_2(L, G, ks, basisp, couplings=couplings, exactly_solvable=exactly_solvable)
+    hm = ham_op_2(L, G, ks, basism, couplings=couplings, exactly_solvable=exactly_solvable)
 
     if n_states == -999:
         if G != -999:

@@ -74,12 +74,11 @@ Richardson-Gaudin equations and Jacobian (derivative w.r.t. pairons)
 
 def rgEqs(vars, k, g, dims):
     c1 = 1
-
-    L, Ne, Nw = dims
-
-    Zf = rationalZ
-    # L = len(k)//2
-
+    if len(dims) == 3:
+        L, Ne, Nw = dims
+        vs = np.zeros(L)
+    else:
+        L, Ne, Nw, vs = dims
     kr = k[:L]
     ki = k[L:]
 
@@ -98,11 +97,11 @@ def rgEqs(vars, k, g, dims):
         js = np.arange(Ne) != i
         set1_r[i] = ((2*reZ(ers[js], eis[js], er, ei).sum()
                       - reZ(wrs, wis, er, ei).sum()
-                      - reZ(kr, ki, er, ei).sum())
+                      - ((1-.5*vs)*reZ(kr, ki, er, ei)).sum())
                    + c1/g)
         set1_i[i] = ((2*imZ(ers[js], eis[js], er, ei).sum()
                       - imZ(wrs, wis, er, ei).sum()
-                      - imZ(kr, ki, er, ei).sum()))
+                      - ((1-.5*vs)*imZ(kr, ki, er, ei)).sum()))
     for i, wr in enumerate(wrs):
         wi = wis[i]
         js = np.arange(Nw) != i
@@ -118,8 +117,11 @@ def rgEqs(vars, k, g, dims):
 
 def rgEqs_q(vars, k, q, dims): # take q = 1/g instead
     c1 = 1
-
-    L, Ne, Nw = dims
+    if len(dims) == 3:
+        L, Ne, Nw = dims
+        vs = np.zeros(L)
+    else:
+        L, Ne, Nw, vs = dims
 
     Zf = rationalZ
     L = len(k)//2
@@ -142,11 +144,11 @@ def rgEqs_q(vars, k, q, dims): # take q = 1/g instead
         js = np.arange(Ne) != i
         set1_r[i] = ((2*reZ(ers[js], eis[js], er, ei).sum()
                       - reZ(wrs, wis, er, ei).sum()
-                      - reZ(kr, ki, er, ei).sum())/q
-                   + c1)
+                      - ((1-.5*vs)*reZ(kr, ki, er, ei)).sum())
+                   + c1*q)
         set1_i[i] = ((2*imZ(ers[js], eis[js], er, ei).sum()
                       - imZ(wrs, wis, er, ei).sum()
-                      - imZ(kr, ki, er, ei).sum()))
+                      - ((1-.5*vs)*imZ(kr, ki, er, ei)).sum()))
     for i, wr in enumerate(wrs):
         wi = wis[i]
         js = np.arange(Nw) != i
@@ -157,7 +159,7 @@ def rgEqs_q(vars, k, q, dims): # take q = 1/g instead
                      - imZ(ers, eis, wr, wi).sum()
                     )
     eqs = np.concatenate((set1_r, set1_i, set2_r, set2_i))
-    return q*eqs
+    return eqs
 
 
 def rg_jac(vars, k, g, dims):
@@ -167,7 +169,11 @@ def rg_jac(vars, k, g, dims):
     f1 is function on RHS of first set of equations
     f2 is function on RHS of second set of equations
     """
-    L, Ne, Nw = dims
+    if len(dims) == 3:
+        L, Ne, Nw = dims
+        vs = np.zeros(L)
+    else:
+        L, Ne, Nw, vs = dims
     N = Ne
     jac = np.zeros((len(vars), len(vars)))
 
@@ -186,12 +192,12 @@ def rg_jac(vars, k, g, dims):
                 # Re(f1), Re(e)
                 jac[i, j] = (2*np.sum(dZ_rr(ers[ls], eis[ls], ers[i], eis[i]))
                                -np.sum(dZ_rr(wrs, wis, ers[i], eis[i]))
-                               -np.sum(dZ_rr(krs, kis, ers[i], eis[i]))
+                               -np.sum((1-vs/2)*dZ_rr(krs, kis, ers[i], eis[i]))
                                )
                 # Re(f1), Im(e)
                 jac[i, j+N] = (2*np.sum(dZ_ri(ers[ls], eis[ls], ers[i], eis[i]))
                                   -np.sum(dZ_ri(wrs, wis, ers[i], eis[i]))
-                                  -np.sum(dZ_ri(krs, kis, ers[i], eis[i]))
+                                  -np.sum((1-vs/2)*dZ_ri(krs, kis, ers[i], eis[i]))
                                   )
                 # Im(f1), Re(e)
                 # -1 * previous by properties of Z!
@@ -261,3 +267,12 @@ def rg_jac(vars, k, g, dims):
             jac[i+3*N, j+N] = jac[i+2*N, j]
 
     return g*jac
+
+
+def density_of_states(e, de):
+    bins = np.arange(e[0], e[-1], de*np.sign(e[-1]))
+    dos = np.zeros(len(bins))
+    for ei in e:
+        bi = np.argmin(np.abs(bins-ei))
+        dos[bi] += 1
+    return bins, dos
