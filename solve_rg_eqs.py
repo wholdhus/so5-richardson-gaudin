@@ -231,7 +231,10 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS_2,
         im_v = min(np.linalg.norm(s*im_k), 10**-6)
         sol = find_root_multithread(vars, kc, g, dims, im_v,
                                     max_steps=max_steps,
-                                    force_gs=force_gs)
+                                    force_gs=force_gs,
+                                    factor=1.5)
+        # sol = root(rgEqs, vars, args=(kc, g, dims),
+        #            jac=rg_jac, method='lm', options=lmd)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g, dims)))
         if er > 0.001:
