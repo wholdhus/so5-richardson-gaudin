@@ -103,6 +103,8 @@ def root_thread_job(vars, kc, g, dims, force_gs):
     if len(es) >= 12: # this doesn't happen for really small systems
         if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
             er = 2  # so I know why this is the error
+    if np.isnan(er):
+        er = 10
     return sol, vars, er
 
 
