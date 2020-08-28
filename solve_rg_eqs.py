@@ -264,7 +264,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS_2,
     # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
     sol = find_root_multithread(vars, kc, g, dims, .001/L,
-                                max_steps=max_steps)
+                                max_steps=max_steps, force_gs=False)
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     return vars, er
