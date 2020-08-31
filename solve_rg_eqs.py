@@ -11,7 +11,7 @@ from utils import * # There are a lot of boring functions in this other file
 
 VERBOSE=False
 FORCE_GS=True
-TOL=10**-12
+TOL=10**-11
 TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
@@ -98,11 +98,13 @@ def root_thread_job(vars, kc, g, dims, force_gs):
         min_w = np.min(np.abs(ws)) # none of the omegas should get too small
         k_cplx = kc[:L] + 1j*kc[L:]
         k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2])) # the e_alpha should be around the ks
-        if min_w < 0.5*kc[0] or k_distance > 10**-3:
+        if k_distance > 10**-3:
             er = 1
-    if len(es) >= 12: # this doesn't happen for really small systems
-        if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
-            er = 2  # so I know why this is the error
+        elif min_w < 0.5*kc[0] and (Ne+Nw)%2 == 0:
+            er = 1
+    # if len(es) >= 12: # this doesn't happen for really small systems
+    #     if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
+    #         er = 2  # so I know why this is the error
     if np.isnan(er):
         er = 10
     return sol, vars, er
@@ -330,7 +332,6 @@ def bootstrap_g0(dims, g0, kc,
         L, Ne, Nw, vs = dims
 
     vars = g0_guess(L, 2, 2, kc, g0, imscale=imscale_v)
-    er = 10**-6
     N = 2
     while N <= Ne:
         log('')
@@ -342,11 +343,11 @@ def bootstrap_g0(dims, g0, kc,
             sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
                                         max_steps=MAX_STEPS_1,
                                         use_k_guess=False,
-                                        force_gs=False)
+                                        force_gs=True)
         else:
             # The previous solution matches to roughly the accuracy of the solution
             # for the shared variables
-            noise_factors = 10*er*np.ones(len(vars))
+            noise_factors = 10**-8*np.ones(4*N)
             # But we will still need to try random stuff for the 4 new variables
             noise_factors[N-2:N] = 1
             noise_factors[2*N-2:2*N] = 1
@@ -355,7 +356,8 @@ def bootstrap_g0(dims, g0, kc,
             sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
                                         max_steps=MAX_STEPS_1,
                                         use_k_guess=False,
-                                        noise_factors=noise_factors)
+                                        noise_factors=noise_factors,
+                                        force_gs=True)
             print(vars)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g0, dims)))
@@ -780,49 +782,120 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     return output_df
 
 
-def solve_rgEqs_3(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
-                  imscale_v=0.001, skip=4):
+def solve_Gs_list(dims, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
+                  imscale_v=0.001):
     if len(dims) == 3:
         L, Ne, Nw = dims
         vs = np.zeros(L)
     else:
         L, Ne, Nw, vs = dims
+    dg0 = dg
     N = Ne + Nw + np.sum(vs)
-
+    Gstar = 1./np.sum(k)
+    gf = G_to_g(0.6*Gstar, k)
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
-
-    gf = G_to_g(Gf, k)
-    qf = 1/gf
-    vars = gc_guess(L, Ne, Nw, kc, np.sign(qf)*g0, imscale=imscale_v)
+    vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
     keep_going = True
     i = 0
     varss = []
     gss = []
     n_fails = 0
-
-    dq0 = dg
-    q0 = g0
-
-
-    qf = 1./(G_to_g(Gf, k))
-    min_dq = np.abs(q0 - qf) * 10**-4 # Taking at most 10**5 steps
-    max_dq = np.abs(q0 - qf) * 10**-3 # taking at least 10
-    log('Final q: {}'.format(qf))
-    dq0 = dg
-    dq = dq0
-    i = 0
-    q = g0
-    keep_going = True
-    sol = root(rgEqs_q, vars, args=(kc, q, dims), method='lm', options=lmd)
+    min_dg = np.abs(gf - g0) * 10**-5 # I don't want to do more than 10**5 steps
+    max_dg = np.abs(gf - g0) * 10**-2
+    print('Incrementing from {} to {}'.format(g0, gf))
+    g_prev = g0
+    Gf_ind = 0
+    gfs = G_to_g(Gfs, k)
+    qfs = 1./G_to_g(Gfs, k)
+    
+    sol = bootstrap_g0(dims, g0, kc, imscale_v)
     vars = sol.x
-    q += np.sign(qf)*dq
-    er = np.max(np.abs(rgEqs_q(vars, kc, q, dims)))
-    print('Found initial solution at 1/g = {} with max error {}'.format(g0, er))
-    print('')
-    print('Incrementing 1/g from {} to {}'.format(q, qf))
-    while keep_going:
-        log('q = {}'.format(q))
+    g = g0 + dg
+    
+    while keep_going and g <= gf:
+        rat = g_to_G(g, k)*np.sum(k)
+        log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
+
+        sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', options=lmd, jac=rg_jac,)
+        try:
+            prev_vars = vars # so we can revert if needed
+            vars = sol.x
+            er = max(abs(rgEqs(vars, kc, g, dims)))
+            ces, cws = unpack_vars(vars, Ne, Nw)
+            if np.isnan(ces).any() or np.isnan(cws).any():
+                print('Solution is NAN. Ending g loop')
+                keep_going = False
+            """
+            Code adjusting step sizes
+            """
+            if er < TOL and dg < .01*gf:
+                print('Increasing dg from {} to {}'.format(dg, dg*2))
+                dg *= 1.2 # we can take bigger steps
+            elif er > TOL2 and dg > min_dg:
+                print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
+                dg *= 0.5
+                print('Stepping back from {} to {}'.format(g, g_prev))
+                g = g_prev
+                vars = prev_vars
+            elif er > 10*TOL2 and dg < min_dg:
+                print('Very high error: {}'.format(er))
+                print('Cannot make dg smaller!')
+                print('Stopping!')
+                keep_going = False
+            """
+            Code removing imaginary parts and storing results
+            """
+            if g+dg > gfs[Gf_ind] and g < gfs[Gf_ind]:
+                log('Removing im(k) at g = {}'.format(g))
+                try:
+                    sol = root(rgEqs, vars, args=(kc, gfs[Gf_ind], dims),
+                               method='lm', options=lmd, jac=rg_jac,)
+                    vars_r, er_r = increment_im_k(vars, dims, gfs[Gf_ind], k, kim,
+                                                  steps=max(L, 10),
+                                                  max_steps=MAX_STEPS_2,
+                                                  force_gs=False)
+                    es, ws = unpack_vars(vars_r, Ne, Nw)
+                    log('Variables after removing im(k)')
+                    log(es)
+                    log(ws)
+                    varss += [vars_r]
+                    gss += [gfs[Gf_ind]]
+                except Exception as e:
+                    print(e)
+                    log('Failed while incrementing im part')
+                    log('Continuing....')
+                    er = 1 # so we decrease step size
+                Gf_ind += 1
+            """
+            Code incrementing g for next step
+            """
+            g_prev = g     
+            i += 1
+            g += dg
+        except Exception as e:
+            print('Error during g incrementing')
+            # print(e)
+            print('Quitting the g increments')
+            keep_going=False
+
+    print('Done incrementing g at {}. Error:'.format(gf))
+    print(er)
+    print('Now incrementing 1/g!')
+    q0 = 1./gf
+    qf = 1./(G_to_g(Gfs[-1], k))
+    min_dq = np.abs(q0 - qf) * 10**-3 # Taking at most 10**5 steps
+    max_dq = np.abs(q0 - qf) * 10**-2 # taking at least 100
+    log('Final q: {}'.format(qf))
+    dq = dg0
+    i = 0
+    q = q0
+    keep_going = True
+    while keep_going and q >= qf: # q decreases
+        rat = g_to_G(1/q, k)*np.sum(k)
+        log('q = {}, G/Gc = {}'.format(np.round(q,4),np.round(rat,4)
+                        ))
         g = 1./q
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
                    method='lm', options=lmd) # need jacobian?
@@ -831,20 +904,6 @@ def solve_rgEqs_3(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             vars = sol.x
             er = max(abs(rgEqs_q(vars, kc, q, dims)))
             ces, cws = unpack_vars(vars, Ne, Nw)
-            if i % skip == 0 and i != 0 or q == qf:
-                try:
-                    log('Removing im(k) at q = {}'.format(q))
-                    vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
-                                                    steps=max(L, 10))
-                    es, ws = unpack_vars(vars_r, Ne, Nw)
-                    gss += [g]
-                    varss += [vars_r]
-                except Exception as e:
-                    print(e)
-                    i += 1
-                    print('Failed while incrementing im part')
-                    print('Continuing ...')
-                    er = 1 # so we decrease step size
 
             """
             Changing step sizes if appropriate
@@ -859,26 +918,36 @@ def solve_rgEqs_3(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('Stepping back from {} to {}'.format(q, q_prev))
                 q = q_prev
                 vars = prev_vars
-            elif er > 10*TOL2 and dq < min_dq:
+            elif er > 10**-4 and dq < min_dq:
                 print('Very high error: {}'.format(er))
                 print('Cannot make dq smaller!')
                 print('Stopping!')
                 keep_going=False
             """
-            Checking if we are done or close to done
+            Removing imaginary parts if needed
             """
-            if np.abs(q-qf) < TOL2:
-                print('DID QF!!!!!!!!!')
-                keep_going = False
-            elif np.abs(q - qf) < 1.5*dq: # close enough
-                print('SKIPPING TO QF')
-                q = qf
-                i += 1
-
-            else:
-                i += 1
-                q += dq * np.sign(qf)
-
+            if q - dq < qfs[Gf_ind] and q > qfs[Gf_ind]:
+                try:
+                    sol = root(rgEqs_q, vars, args=(kc, qfs[Gf_ind], dims),
+                               method='lm', options=lmd) # need jacobian?
+                    log('Removing im(k) at q = {}'.format(qfs[Gf_ind]))
+                    vars_r, er_r = increment_im_k_q(vars, dims, qfs[Gf_ind], k, kim,
+                                                    steps=max(L, 10))
+                    es, ws = unpack_vars(vars_r, Ne, Nw)
+                    gss += [gfs[Gf_ind]]
+                    varss += [vars_r]
+                    log('Variables after removing im(k)')
+                    log(es)
+                    log(ws)
+                except Exception as e:
+                    print(e)
+                    i += 1
+                    print('Failed while incrementing im part')
+                    print('Continuing ...')
+                    er = 1 # so we decrease step size
+                Gf_ind += 1
+            i += q
+            q -= dq
         except Exception as e:
             print('Error during g incrementing')
             # print(e)
