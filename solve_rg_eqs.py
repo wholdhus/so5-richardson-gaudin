@@ -910,19 +910,19 @@ def solve_Gs_list(dims, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
             """
             if er < TOL and dq < max_dq: # Let's allow larger steps for q
                 print('Increasing dq from {} to {}'.format(dq, 2*dq))
-                dq *= 2
+                dq *= 1.2
             elif er > TOL2 and dq > min_dq:
                 print('Decreasing dq from {} to {}'.format(dq, 0.5*dq))
                 q_prev = q - dq*np.sign(qf) # resetting to last value
-                dq *= 0.1
+                dq *= 0.5
                 print('Stepping back from {} to {}'.format(q, q_prev))
                 q = q_prev
                 vars = prev_vars
-            elif er > 10**-4 and dq < min_dq:
+            elif er > 10**-3 and dq < min_dq:
                 print('Very high error: {}'.format(er))
                 print('Cannot make dq smaller!')
-                print('Stopping!')
-                keep_going=False
+                # print('Stopping!')
+                # keep_going=False
             """
             Removing imaginary parts if needed
             """

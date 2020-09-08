@@ -22,14 +22,20 @@ Gf = float(sys.argv[3])
 Ne = N//2
 Nw = N//2
 
-dg = 0.01/N
-if Gf < 0:
-    dg *= 10 # works better this way?
+dg = 0.04/L
 
-g0 = .1*dg
-imk = g0
+g0 = .01*dg
+imk = dg
 # imv = g0
-imv = .1*g0
+imv = g0/L
+
+# dg = 0.01/N
+# if Gf < 0:
+#     dg *= 10 # works better this way?
+
+# g0 = .1*dg
+# imk = g0
+# imv = .1*g0
 
 ks = np.arange(1, 2*L+1, 2)*0.5*np.pi/L
 
