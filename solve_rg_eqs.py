@@ -330,9 +330,9 @@ def bootstrap_g0(dims, g0, kc,
         vs = np.zeros(L)
     else:
         L, Ne, Nw, vs = dims
-
-    vars = g0_guess(L, 2, 2, kc, g0, imscale=imscale_v)
-    N = 2
+    N = min(2, Ne)
+    vars = g0_guess(L, N, N, kc, g0, imscale=imscale_v)
+    force_gs=True
     while N <= Ne:
         log('')
         log('Now using {} fermions'.format(2*N))
@@ -343,7 +343,7 @@ def bootstrap_g0(dims, g0, kc,
             sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
                                         max_steps=MAX_STEPS_1,
                                         use_k_guess=False,
-                                        force_gs=True)
+                                        force_gs=force_gs)
         else:
             # The previous solution matches to roughly the accuracy of the solution
             # for the shared variables
@@ -357,7 +357,7 @@ def bootstrap_g0(dims, g0, kc,
                                         max_steps=MAX_STEPS_1,
                                         use_k_guess=False,
                                         noise_factors=noise_factors,
-                                        force_gs=True)
+                                        force_gs=force_gs)
             print(vars)
         vars = sol.x
         er = max(abs(rgEqs(vars, kc, g0, dims)))
@@ -409,6 +409,9 @@ def calculate_energies(dims, gs, ks, varss):
         L, Ne, Nw, vs = dims
     energies = np.zeros(len(gs))
     Rs = np.zeros((len(gs), L))
+    qks = (0.5*vs-1)**2-3*(0.5*vs-1) - 1
+    log('Casimirs')
+    log(qks)
     log('Calculating R_k, energy')
     for i, g in enumerate(gs):
         ces, cws = unpack_vars(varss[:, i], Ne, Nw)
@@ -417,7 +420,7 @@ def calculate_energies(dims, gs, ks, varss):
         # if np.abs(np.imag(R)).any() > 10**-12:
         #     log('Woah R_{} is compelex'.format(i))
         #     log(R)
-        const = 3*g*np.sum(ks**2)/(1+g*np.sum(ks))
+        const = g*np.sum(qks*ks**2)/(1+g*np.sum(ks))
         energies[i] = np.sum(ks*np.real(R))*2/(1 + g*np.sum(ks)) - const
         # log(energies[i])
     return energies, Rs
@@ -481,6 +484,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             print('')
             print('Now incrementing from g = {} to {}'.format(g0, gf))
             print('')
+            i += 1
         else:
             sol = root(rgEqs, vars, args=(kc, g, dims),
                        method='lm', options=lmd)#, jac=rg_jac)
@@ -508,6 +512,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             if er < TOL and dg < .01*gf:
                 print('Increasing dg from {} to {}'.format(dg, dg*2))
                 dg *= 2 # we can take bigger steps
+                i += 1
             elif er > TOL2 and dg > min_dg:
                 print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
                 dg *= 0.5
@@ -519,15 +524,16 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('Cannot make dg smaller!')
                 print('Stopping!')
                 keep_going = False
+            else:
+                # Not incrementing i if we're stepping back
+                i += 1
             if np.abs(G - Gf) < TOL2:
                 print('At Gf')
                 keep_going = False
             elif np.abs(G - Gf) < 1.5*dg: # close enough
                 print('Close enough to gf')
                 G = Gf
-                i += 1
             else:
-                i += 1
                 G += dg * np.sign(Gf)
             G_prev = G
         except Exception as e:
@@ -578,7 +584,6 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     gf = G_to_g(0.6*Gstar, k)
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
-    vars = g0_guess(L, Ne, Nw, kc, np.sign(gf)*g0, imscale=imscale_v)
     keep_going = True
     i = 0
     varss = []
@@ -606,6 +611,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             print('')
             print('Now incrementing from g = {} to {}'.format(g0, gf))
             print('')
+            i += 1
         else:
             sol = root(rgEqs, vars, args=(kc, g, dims),
                        method='lm', options=lmd, jac=rg_jac,)
@@ -643,6 +649,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             if er < TOL and dg < .01*gf:
                 print('Increasing dg from {} to {}'.format(dg, dg*2))
                 dg *= 1.2 # we can take bigger steps
+                i += 1
             elif er > TOL2 and dg > min_dg:
                 print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
                 dg *= 0.5
@@ -654,6 +661,8 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('Cannot make dg smaller!')
                 print('Stopping!')
                 keep_going = False
+            else:
+                i += 1
             """
             Code incrementing g for next step
             """
@@ -664,9 +673,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             elif np.abs(g - gf) < 1.1*dg: # close enough
                 print('Close enough to gf')
                 g = gf
-                i += 1
             else:
-                i += 1
                 g += dg * np.sign(gf)
         except Exception as e:
             print('Error during g incrementing')
@@ -722,6 +729,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             if er < TOL and dq < max_dq: # Let's allow larger steps for q
                 print('Increasing dq from {} to {}'.format(dq, 2*dq))
                 dq *= 2
+                i += 1
             elif er > TOL2 and dq > min_dq:
                 print('Decreasing dq from {} to {}'.format(dq, 0.5*dq))
                 q_prev = q - dq*np.sign(qf) # resetting to last value
@@ -734,6 +742,8 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 print('Cannot make dq smaller!')
                 print('Stopping!')
                 keep_going=False
+            else:
+                i += 1
             """
             Checking if we are done or close to done
             """
@@ -743,10 +753,7 @@ def solve_rgEqs_2(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             elif np.abs(q - qf) < 1.5*dq: # close enough
                 print('SKIPPING TO QF')
                 q = qf
-                i += 1
-
             else:
-                i += 1
                 q += dq * np.sign(qf)
 
         except Exception as e:
@@ -808,11 +815,11 @@ def solve_Gs_list(dims, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
     Gf_ind = 0
     gfs = G_to_g(Gfs, k)
     qfs = 1./G_to_g(Gfs, k)
-    
+
     sol = bootstrap_g0(dims, g0, kc, imscale_v)
     vars = sol.x
     g = g0 + dg
-    
+
     while keep_going and g <= gf:
         rat = g_to_G(g, k)*np.sum(k)
         log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
@@ -871,7 +878,7 @@ def solve_Gs_list(dims, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
             """
             Code incrementing g for next step
             """
-            g_prev = g     
+            g_prev = g
             i += 1
             g += dg
         except Exception as e:

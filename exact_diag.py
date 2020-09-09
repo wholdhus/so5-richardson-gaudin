@@ -529,20 +529,19 @@ def iso_wavefunction(L, N, basis, basisf):
                 ['+|+', [[-1/np.sqrt(2), L-l-1, L+l] for l in range(L)]]]
     sum_t0_o = quantum_operator({'static': sum_t0_l}, basis=basisf,
                                 check_herm=False, check_symm=False)
-    op = sum_t0_o
     v0 = np.zeros(basisf.Ns, dtype=np.complex128)
     v0[-1] = 1 # vacuum state!
     print('sum_k n_k in vacuum')
     nk = find_nk(L, v0, basisf)
     print(np.sum(nk))
 
-    v = op.dot(v0)
+    v = sum_t0_o.dot(v0)
     v *= 1./np.linalg.norm(v)
     nk = find_nk(L, v, basisf)
     print('sum_k n_k')
     print(np.sum(nk))
     for i in range(N//2 - 1):
-        v = op.dot(v)
+        v = sum_t0_o.dot(v)
         v *= 1./np.linalg.norm(v)
         nk = find_nk(L, v, basisf)
         print('sum_k n_k')
