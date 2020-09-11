@@ -736,7 +736,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     return output_df
 
 
-def solve_Gs_list(dims, sol0, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
+def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
                   imscale_v=0.001):
     if len(dims) == 3:
         L, Ne, Nw = dims
@@ -915,8 +915,7 @@ def solve_Gs_list(dims, sol0, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print('Error: {}'.format(er))
     qf = q
     varss = np.array(varss)
-    print('Shape of varter')
-    print(np.shape(varss))
+
     gss = np.array(gss)
     output_df = pandas.DataFrame({})
     output_df['g'] = gss
