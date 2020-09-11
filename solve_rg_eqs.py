@@ -331,15 +331,18 @@ def bootstrap_g0(dims, g0, kc,
     else:
         L, Ne, Nw, vs = dims
 
-    vars = g0_guess(L, 2, 2, kc, g0, imscale=imscale_v)
-    N = 2
+    if Ne + Nw == 2:
+        N = 1
+    else:
+        N = 2
+    vars = g0_guess(L, N, N, kc, g0, imscale=imscale_v)
     while N <= Ne:
         log('')
         log('Now using {} fermions'.format(2*N))
         log('')
         dims = (L, N, N)
         # Solving for 2N fermions using extrapolation from previous solution
-        if N == 2:
+        if N <= 2:
             sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
                                         max_steps=MAX_STEPS_1,
                                         use_k_guess=False,
@@ -885,8 +888,8 @@ def solve_Gs_list(dims, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
     print('Now incrementing 1/g!')
     q0 = 1./gf
     qf = 1./(G_to_g(Gfs[-1], k))
-    min_dq = np.abs(q0 - qf) * 10**-3 # Taking at most 10**5 steps
-    max_dq = np.abs(q0 - qf) * 10**-2 # taking at least 100
+    min_dq = np.abs(q0 - qf) * 10**-5 # Taking at most 10**5 steps
+    max_dq = np.abs(q0 - qf) * 10**-3 # taking at least 100
     log('Final q: {}'.format(qf))
     dq = dg0
     i = 0
@@ -898,7 +901,8 @@ def solve_Gs_list(dims, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
                         ))
         g = 1./q
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
-                   method='lm', options=lmd) # need jacobian?
+                   method='lm', options=lmd,
+                   jac = rg_jac_q) # need jacobian?
         try:
             prev_vars = vars
             vars = sol.x
@@ -921,8 +925,8 @@ def solve_Gs_list(dims, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
             elif er > 10**-3 and dq < min_dq:
                 print('Very high error: {}'.format(er))
                 print('Cannot make dq smaller!')
-                # print('Stopping!')
-                # keep_going=False
+                print('Stopping!')
+                keep_going=False
             """
             Removing imaginary parts if needed
             """
