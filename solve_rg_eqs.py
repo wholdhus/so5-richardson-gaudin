@@ -233,14 +233,17 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS_2,
 
         kc = np.concatenate((k, s*im_k))
         im_v = min(np.linalg.norm(s*im_k), 10**-6)
-        sol = find_root_multithread(vars, kc, g, dims, im_v,
-                                    max_steps=max_steps,
-                                    force_gs=force_gs,
-                                    factor=1.2)
-        # sol = root(rgEqs, vars, args=(kc, g, dims),
-        #            jac=rg_jac, method='lm', options=lmd)
+        if max_steps > 1:
+            sol = find_root_multithread(vars, kc, g, dims, im_v,
+                                        max_steps=max_steps,
+                                        force_gs=force_gs,
+                                        factor=1.2)
+        else:
+            sol = root(rgEqs, vars, args=(kc, g, dims),
+                       jac=rg_jac, method='lm', options=lmd)
         vars = sol.x
-        er = max(abs(rgEqs(vars, kc, g, dims)))
+        # er = max(abs(rgEqs(vars, kc, g, dims)))
+        er = max(abs(sol.fun))
         if er > 0.001:
             print('This is too bad')
             return
@@ -265,10 +268,15 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS_2,
             s -= ds
     # running at s = 0
     kc = np.concatenate((k, np.zeros(L)))
-    sol = find_root_multithread(vars, kc, g, dims, .001/L,
-                                max_steps=max_steps, force_gs=False)
+    if max_steps > 1:
+        sol = find_root_multithread(vars, kc, g, dims, .001/L,
+                                    max_steps=max_steps, force_gs=False)
+    else:
+        sol = root(rgEqs, vars, args=(kc, g, dims),
+                   jac=rg_jac, method='lm', options=lmd)
     vars = sol.x
-    er = max(abs(rgEqs(vars, kc, g, dims)))
+    # er = max(abs(rgEqs(vars, kc, g, dims)))
+    er = max(abs(sol.fun))
     return vars, er
 
 
@@ -290,9 +298,9 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
         kc = np.concatenate((k, s*im_k))
         im_v = min(np.linalg.norm(s*im_k), 10**-6)
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
-                   method='lm', options=lmd)
+                   method='lm', options=lmd, jac = rg_jac_q)
         vars = sol.x
-        er = max(abs(rgEqs_q(vars, kc, q, dims)))
+        er = max(abs(sol.fun))
         if er > 0.001:
             print('This is too bad')
             return
@@ -317,9 +325,9 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
             s -= ds
     kc = np.concatenate((k, np.zeros(L)))
     sol = root(rgEqs_q, vars, args=(kc, q, dims),
-               method='lm', options=lmd)
+               method='lm', options=lmd, jac = rg_jac_q)
     vars = sol.x
-    er = max(abs(rgEqs_q(vars, kc, q, dims)))
+    er = max(abs(sol.fun))
     return vars, er
 
 
@@ -662,7 +670,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                             ))
             g = 1./q
             sol = root(rgEqs_q, vars, args=(kc, q, dims),
-                       method='lm', options=lmd) # need jacobian?
+                       method='lm', options=lmd, jac = rg_jac_q)
             try:
                 prev_vars = vars
                 vars = sol.x
@@ -825,7 +833,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
                                method='lm', options=lmd, jac=rg_jac,)
                     vars_r, er_r = increment_im_k(vars, dims, gfs[Gf_ind], k, kim,
                                                   steps=max(L, 10),
-                                                  max_steps=MAX_STEPS_2,
+                                                  max_steps=-1,
                                                   force_gs=False)
                     es, ws = unpack_vars(vars_r, Ne, Nw)
                     log('Variables after removing im(k)')
@@ -870,7 +878,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
         g = 1./q
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
                    method='lm', options=lmd,
-                   jac = rg_jac_q) # need jacobian?
+                   jac = rg_jac_q)
         try:
             prev_vars = vars
             vars = sol.x
@@ -901,7 +909,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
             if q - dq < qfs[Gf_ind] and q > qfs[Gf_ind]:
                 try:
                     sol = root(rgEqs_q, vars, args=(kc, qfs[Gf_ind], dims),
-                               method='lm', options=lmd) # need jacobian?
+                               method='lm', options=lmd, jac = rg_jac_q)
                     log('Removing im(k) at q = {}'.format(qfs[Gf_ind]))
                     vars_r, er_r = increment_im_k_q(vars, dims, qfs[Gf_ind], k, kim,
                                                     steps=max(L, 10))
