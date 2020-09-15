@@ -19,7 +19,7 @@ CPUS = multiprocessing.cpu_count()
 JOBS = max(CPUS//2, 2)
 if CPUS > 10:
     # NOT MY LAPTOP, WILLING TO WAIT A WHILE
-    MAX_STEPS_1 = 1000 * JOBS
+    MAX_STEPS_1 = 200 * JOBS
     MAX_STEPS_2 = 10 * JOBS
 else:
     MAX_STEPS_1 = 100 * JOBS
@@ -236,7 +236,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS_2,
         sol = find_root_multithread(vars, kc, g, dims, im_v,
                                     max_steps=max_steps,
                                     force_gs=force_gs,
-                                    factor=1.5)
+                                    factor=1.2)
         # sol = root(rgEqs, vars, args=(kc, g, dims),
         #            jac=rg_jac, method='lm', options=lmd)
         vars = sol.x
@@ -384,12 +384,14 @@ def bootstrap_g0(dims, g0, kc,
 def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
     vs = np.zeros(L)
 
-    Ns = np.arange(2, 4*L, 2)
-    if final_N is not None:
-        Ns = np.arange(2, final_N+2, 2)
-    Ne = Ns[-1]//2
+    if final_N is None:
+        final_N = 4*L-2
+    Ns = np.arange(2, final_N+2, 2)
     sols = [None for N in Ns]
-    for i, N in enumerate(Ns):
+    N_tries = 0
+    i = 0
+    N = 2
+    while N <= final_N:
         log('')
         log('Now using {} fermions'.format(N))
         log('')
@@ -417,29 +419,41 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
                                     use_k_guess=False,
                                     noise_factors=noise_factors,
                                     force_gs=force_gs,
-                                    factor=1.1)
+                                    factor=1.05)
         print(vars)
         vars = sol.x
         er = max(abs(sol.fun))
         log('Error with {} fermions: {}'.format(2*n, er))
-        sols[i] = sol
-
-        if n%2 == 1:
-            # setting up for N divisible by 4 next step
-            if n > 1:
-                vars = sols[i-1].x # Better to start from last similar case
-            n -= 1
-            incr = 2
+        if np.isnan(er):
+            print('Solution was nan for the {}th time!'.format(N_tries+1))
+            if N_tries < 5:
+                print('Trying again!')
+                N_tries += 1
+            else:
+                print('That\'s enough!')
+                raise Exception('Too many nans')
         else:
-            incr = 1
+            N_tries = 0
+            sols[i] = sol
 
-        if n >= 1:
-            es, ws = unpack_vars(vars, n, n)
-            vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
-            esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
-            es = np.append(es, esg[-incr:])
-            ws = np.append(ws, wsg[-incr:])
-            vars = pack_vars(es, ws)
+            if n%2 == 1:
+                # setting up for N divisible by 4 next step
+                if n > 1:
+                    vars = sols[i-1].x # Better to start from last similar case
+                n -= 1
+                incr = 2
+            else:
+                incr = 1
+
+            if n >= 1:
+                es, ws = unpack_vars(vars, n, n)
+                vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
+                esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
+                es = np.append(es, esg[-incr:])
+                ws = np.append(ws, wsg[-incr:])
+                vars = pack_vars(es, ws)
+            i += 1
+            N += 2
 
     return sols, Ns
 
