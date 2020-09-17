@@ -16,10 +16,10 @@ TOL2=10**-7 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
-JOBS = max(CPUS//2, 2)
+JOBS = max(CPUS//4, 2)
 if CPUS > 10:
     # NOT MY LAPTOP, WILLING TO WAIT A WHILE
-    MAX_STEPS_1 = 200 * JOBS
+    MAX_STEPS_1 = 1000 * JOBS
     MAX_STEPS_2 = 10 * JOBS
 else:
     MAX_STEPS_1 = 100 * JOBS

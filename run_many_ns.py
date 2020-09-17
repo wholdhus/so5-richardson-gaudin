@@ -5,6 +5,7 @@ import json
 import sys
 import pickle
 from os import path
+import glob
 
 try:
     with open('context.json') as f:
@@ -23,18 +24,22 @@ dg = 0.04/L
 g0 = .001/L
 imk = dg
 imv = g0/L
+# imv =g0
 dg0 = dg
 k = np.arange(1, 2*l+1, 2)*0.5*np.pi/l
 kim = imk*(-1)**np.arange(L)
 kc = np.concatenate((k, kim))
 
 Gc = 1./np.sum(k)
-Gfs = np.array([0.25, 0.5, 0.9, 1.1, 1.5, 2., 2.5, 3.])*Gc
+Gfs = np.array([0.25, 0.5, 0.9, 1.1, 1.5, 2., 2.5, 3., 3.5, 4.])*Gc
 
 pf = "sols_l{}_N_{}-{}.p".format(l, 2, final_N)
+
 if not path.exists(pf):
+    # pfs = glob.glob('sols_l{}_*'.format(l))
     print('Finding initial solutions up to N = {}'.format(4*L-2))
     sols, Ns = bootstrap_g0_multi(L, g0, kc, imv, final_N = final_N)
+        
 
     print('Putting sols into dict for pickling')
     sols_dict = {}
