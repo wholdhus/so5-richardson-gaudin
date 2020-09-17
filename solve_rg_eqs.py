@@ -400,69 +400,73 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
     i = 0
     N = 2
     while N <= final_N:
-        log('')
-        log('Now using {} fermions'.format(N))
-        log('')
-        n = N//2
-        dims = (L, n, n)
-        print('Dimensions')
-        print(dims)
-        # Solving for 2n fermions using extrapolation from previous solution
-        if n <= 2:
-            force_gs=False
-            noise_factors=None
-            vars = g0_guess(L, n, n, kc, g0, imscale=imscale_v)
-        else:
-            # The previous solution matches to roughly the accuracy of the solution
-            # for the shared variables
-            # noise_factors = 10*er*np.ones(len(vars))
-            noise_factors = 10**-6*np.ones(len(vars))
-            # But we will still need to try random stuff for the 4 new variables
-            noise_factors[n-2:n] = 1
-            noise_factors[2*n-2:2*n] = 1
-            noise_factors[3*n-2:3*n] = 1
-            noise_factors[4*n-2:4*n] = 1
-        sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
-                                    max_steps=MAX_STEPS_1,
-                                    use_k_guess=False,
-                                    noise_factors=noise_factors,
-                                    force_gs=force_gs,
-                                    factor=1.05)
-        print(vars)
-        vars = sol.x
-        er = max(abs(sol.fun))
-        log('Error with {} fermions: {}'.format(2*n, er))
-        if np.isnan(er):
-            print('Solution was nan for the {}th time!'.format(N_tries+1))
-            if N_tries < 5:
-                print('Trying again!')
-                N_tries += 1
+        try:
+            log('')
+            log('Now using {} fermions'.format(N))
+            log('')
+            n = N//2
+            dims = (L, n, n)
+            print('Dimensions')
+            print(dims)
+            # Solving for 2n fermions using extrapolation from previous solution
+            if n <= 2:
+                force_gs=False
+                noise_factors=None
+                vars = g0_guess(L, n, n, kc, g0, imscale=imscale_v)
             else:
-                print('That\'s enough!')
-                raise Exception('Too many nans')
-        else:
-            N_tries = 0
-            sols[i] = sol
-
-            if n%2 == 1:
-                # setting up for N divisible by 4 next step
-                if n > 1:
-                    vars = sols[i-1].x # Better to start from last similar case
-                n -= 1
-                incr = 2
+                # The previous solution matches to roughly the accuracy of the solution
+                # for the shared variables
+                # noise_factors = 10*er*np.ones(len(vars))
+                noise_factors = 10**-6*np.ones(len(vars))
+                # But we will still need to try random stuff for the 4 new variables
+                noise_factors[n-2:n] = 1
+                noise_factors[2*n-2:2*n] = 1
+                noise_factors[3*n-2:3*n] = 1
+                noise_factors[4*n-2:4*n] = 1
+            sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
+                                        max_steps=MAX_STEPS_1,
+                                        use_k_guess=False,
+                                        noise_factors=noise_factors,
+                                        force_gs=force_gs,
+                                        factor=1.05)
+            vars = sol.x
+            er = max(abs(sol.fun))
+            log('Error with {} fermions: {}'.format(2*n, er))
+            if np.isnan(er):
+                print('Solution was nan for the {}th time!'.format(N_tries+1))
+                if N_tries < 5:
+                    print('Trying again!')
+                    N_tries += 1
+                else:
+                    print('That\'s enough!')
+                    raise Exception('Too many nans')
             else:
-                incr = 1
+                N_tries = 0
+                sols[i] = sol
 
-            if n >= 1:
-                es, ws = unpack_vars(vars, n, n)
-                vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
-                esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
-                es = np.append(es, esg[-incr:])
-                ws = np.append(ws, wsg[-incr:])
-                vars = pack_vars(es, ws)
-            i += 1
-            N += 2
+                if n%2 == 1:
+                    # setting up for N divisible by 4 next step
+                    if n > 1:
+                        vars = sols[i-1].x # Better to start from last similar case
+                    n -= 1
+                    incr = 2
+                else:
+                    incr = 1
 
+                if n >= 1:
+                    es, ws = unpack_vars(vars, n, n)
+                    vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
+                    esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
+                    es = np.append(es, esg[-incr:])
+                    ws = np.append(ws, wsg[-incr:])
+                    vars = pack_vars(es, ws)
+                i += 1
+                N += 2
+        except Exception as e:
+            print('Failed at N = {}'.format(Ns[i-1]))
+            print('Returning partial results')
+            Ns = Ns[:i-1]
+            sols = sols[:i-1]
     return sols, Ns
 
 
