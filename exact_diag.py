@@ -140,11 +140,20 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None,
                           [2*(d_c - sz_c), m_k1, m_k2]
                          ]
     if no_kin:
+        # static = [
+        #           ['++--|', ppairing],
+        #           ['+-|+-', zpairing],
+        #           ['|++--', ppairing],
+        #           ['+-|-+', spm]
+        #         ]
         static = [
-                  ['++--|', ppairing],
-                  ['+-|+-', zpairing],
-                  ['|++--', ppairing],
-                  ['+-|-+', spm]
+                    ['++--|', ppairing], ['--++|', ppairing],
+                    ['+-|+-', zpairing], ['-+|-+', zpairing],
+                    ['|++--', ppairing], ['|--++', ppairing],
+                    ['+-|-+', spm], ['-+|+-', spm],
+                    ['nn|', same_same],
+                    ['|nn', same_same],
+                    ['n|n', same_diff]
                 ]
     elif not exactly_solvable:
         static = [['n|', all_k], ['|n', all_k],
