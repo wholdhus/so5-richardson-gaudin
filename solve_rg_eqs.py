@@ -457,20 +457,35 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
     return sols, Ns
 
 
-def continue_bootstraping(partial_results, imv, final_N):
+def continue_bootstrap(partial_results, imscale_v, final_N):
     Ns = np.arange(2, final_N+2, 2)
     sols = [None for N in Ns]
     partial_Ns = partial_results['Ns']
-    for i, N in enumerate(partial_Ns):
-        sols[i] = partial_results['sol_{}'.format(N)]
     g0 = partial_results['g0']
     kc = partial_results['kc']
     L = partial_results['l']
+    for i, N in enumerate(partial_Ns):
+        print((i, N))
+        sols[i] = partial_results['sol_{}'.format(N)]
+    if partial_Ns[-1]%4 == 0:
+        vars = sols[i].x
+        incr = 1
+        n = partial_Ns[-1]//2
+    else:
+        vars = sols[i-1].x
+        incr = 1
+        n = partial_Ns[-2]//2
+    es, ws = unpack_vars(vars, n, n)
+    vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
+    esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
+    es = np.append(es, esg[-incr:])
+    ws = np.append(ws, wsg[-incr:])
+    vars = pack_vars(es, ws)
 
     N_tries = 0
-    i = 0
+    i = len(partial_Ns)
     N = partial_Ns[-1] + 2
-    print('Starting at N = {}'.format(N))
+    print('Starting at N = {}, i = {}'.format(N, i))
     while N <= final_N:
         try:
             log('')
@@ -499,7 +514,7 @@ def continue_bootstraping(partial_results, imv, final_N):
                                         max_steps=MAX_STEPS_1,
                                         use_k_guess=False,
                                         noise_factors=noise_factors,
-                                        force_gs=force_gs,
+                                        force_gs=False,
                                         factor=1.05)
             vars = sol.x
             er = max(abs(sol.fun))
@@ -534,8 +549,8 @@ def continue_bootstraping(partial_results, imv, final_N):
                     vars = pack_vars(es, ws)
                 i += 1
                 N += 2
-        except Exception as e:
-            print('Failed at N = {}'.format(Ns[i-1]))
+        except Exception as e:    
+            print('Failed at N = {}'.format(N))
             print('Returning partial results')
             Ns = Ns[:i-1]
             sols = sols[:i-1]

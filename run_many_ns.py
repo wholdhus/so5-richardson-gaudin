@@ -33,19 +33,19 @@ kc = np.concatenate((k, kim))
 Gc = 1./np.sum(k)
 Gfs = np.array([0.25, 0.5, 0.9, 1.1, 1.5, 2., 2.5, 3., 3.5, 4.])*Gc
 
-pf = "sols_l{}_N_{}-{}.p".format(l, Ns[0], Ns[-1])
+pf = "sols_l{}_N_{}-{}.p".format(l, 2, final_N)
 
 if path.exists(pf):
     print('Already bootstrapped this system.')
 
 else:
-    pfs = glob.glob('sols_l{}_N_*''.format(l))
+    pfs = glob.glob('sols_l{}_N_*'.format(l))
     if len(pfs) > 0:
-        pf_Ns = np.array([int(f.split(-)[1].split('.')[0]) for f in pf_Ns])
+        pf_Ns = np.array([int(f.split('-')[1].split('.')[0]) for f in pfs])
         best_ind = np.argmax(pf_Ns)
         print('Found results up to N = {}'.format(np.max(pf_Ns)))
-        partial_sd = pickle.load(open(pfs[largest_ind], 'rb'))
-        if final_N > max(pf_Ns)
+        partial_sd = pickle.load(open(pfs[best_ind], 'rb'))
+        if final_N > max(pf_Ns):
             print('Bootstrapping the rest of the way')
             sols, Ns = continue_bootstrap(partial_sd, imv, final_N)
         else:
