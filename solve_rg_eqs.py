@@ -50,13 +50,27 @@ def gc_guess(L, Ne, Nw, kc, g0, imscale=0.01):
 def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
     k_r = kc[:L]
     k_i = kc[L:]
-    double_e = np.arange(Ne)//2
-    double_w = np.arange(Nw)//2
-    # Initial guesses from perturbation theory
-    er = k_r[double_e]*(1-g0*k_r[double_e])
-    wr = k_r[double_w]*(1-g0*k_r[double_w]/3)
-    ei = k_i[double_e]*(1-g0*k_r[double_e])
-    wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
+    if Ne == Nw:
+        double_e = np.arange(Ne)//2
+        double_w = np.arange(Nw)//2
+        # Initial guesses from perturbation theory
+        er = k_r[double_e]*(1-g0*k_r[double_e])
+        wr = k_r[double_w]*(1-g0*k_r[double_w]/3)
+        ei = k_i[double_e]*(1-g0*k_r[double_e])
+        wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
+    elif Ne > Nw: # Will be extra spin down
+        # Still Nw doubled up T=0 pairs
+        double_w = np.arange(Nw)//2
+        Nd = Ne - Nw # number of extra spin-down pairs
+        # Double occupancy of Nw pairs, single occupancy for remaining
+        er = np.concatenate((k_r[double_w], k_r[Nw//2:Nw//2+Nd]))
+        wr = k_r[double_w] # still raising the Nw lowest pairs to T=0
+        ei = np.concatenate((k_i[double_w], k_i[Nw//2:Nw//2+Nd]))
+        wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
+    else:
+        print('Please use Ne >= Nw')
+        return Exception('Error: can\'t handle Nw > Ne')
+
     # Also adding some noise (could find at next order in pert. theory?)
     # coefficients are more or less arbitrary
     ei += .07*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
@@ -161,11 +175,12 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS_1,
     vars = sol.x
     er = max(abs(rgEqs(vars, kc, g, dims)))
     es, ws = unpack_vars(vars, Ne, Nw)
-    if min(abs(ws)) < 0.5*min(abs(es)) and force_gs and Nw%2==0:
-        # changing to flag only when omega is much smaller than e
-        # since all are zero at the critical coupling
-        print('Omega = 0 solution! Rerunning.')
-        er = 1
+    if Nw != 0:
+        if min(abs(ws)) < 0.5*min(abs(es)) and force_gs and Nw%2==0:
+            # changing to flag only when omega is much smaller than e
+            # since all are zero at the critical coupling
+            print('Omega = 0 solution! Rerunning.')
+            er = 1
     elif len(es) >= 12: # this doesn't happen for really small systems
         if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
             er = 2  # so I know why this is the error
@@ -549,7 +564,7 @@ def continue_bootstrap(partial_results, imscale_v, final_N):
                     vars = pack_vars(es, ws)
                 i += 1
                 N += 2
-        except Exception as e:    
+        except Exception as e:
             print('Failed at N = {}'.format(N))
             print('Returning partial results')
             Ns = Ns[:i-1]
