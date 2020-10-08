@@ -112,7 +112,7 @@ def root_thread_job(vars, kc, g, dims, force_gs):
         if k_distance > 10**-3:
             er = 1
         elif min_w < 0.5*kc[0] and (Ne+Nw)%2 == 0:
-            er = 1
+            er = 2
     # if len(es) >= 12: # this doesn't happen for really small systems
     #     if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
     #         er = 2  # so I know why this is the error
@@ -347,6 +347,10 @@ def bootstrap_g0(dims, g0, kc,
         log('Now using {} fermions'.format(2*Nei))
         log('Ne, Nw = {}'.format((Nei, Nwi)))
         log('')
+        log('Variable guess')
+        ces, cws = unpack_vars(vars, Nei, Nwi)
+        log(ces)
+        log(cws)
         dims = (L, Nei, Nwi)
         # Solving for 2N fermions using extrapolation from previous solution
         if Nei <= 2:
