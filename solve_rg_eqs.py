@@ -109,15 +109,15 @@ def root_thread_job(vars, kc, g, dims, force_gs):
         min_w = np.min(np.abs(ws)) # none of the omegas should get too small
         k_cplx = kc[:L] + 1j*kc[L:]
         k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2])) # the e_alpha should be around the ks
-        if k_distance > 10**-3:
+        if k_distance > 10**-3 and Ne == Nw: # this only makes sense for Ne == Nw
             er = 1
-        elif min_w < 0.5*kc[0] and (Ne+Nw)%2 == 0:
-            er = 1
+        if min_w < 0.5*kc[0] and (Ne+Nw)%2 == 0:
+            er = 2
     # if len(es) >= 12: # this doesn't happen for really small systems
     #     if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
     #         er = 2  # so I know why this is the error
     if np.isnan(er):
-        er = 10
+        er = 3
     return sol, vars, er
 
 
@@ -347,6 +347,10 @@ def bootstrap_g0(dims, g0, kc,
         log('Now using {} fermions'.format(2*Nei))
         log('Ne, Nw = {}'.format((Nei, Nwi)))
         log('')
+        log('Variable guess')
+        ces, cws = unpack_vars(vars, Nei, Nwi)
+        log(ces)
+        log(cws)
         dims = (L, Nei, Nwi)
         # Solving for 2N fermions using extrapolation from previous solution
         if Nei <= 2:
