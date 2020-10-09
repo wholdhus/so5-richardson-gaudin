@@ -58,6 +58,7 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
         wr = k_r[double_w]*(1-g0*k_r[double_w]/3)
         ei = k_i[double_e]*(1-g0*k_r[double_e])
         wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
+
     elif Ne > Nw: # Will be extra spin down
         # Still Nw doubled up T=0 pairs
         double_w = np.arange(Nw)//2
@@ -66,7 +67,20 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
         er = np.concatenate((k_r[double_w], k_r[Nw//2:Nw//2+Nd]))
         wr = k_r[double_w] # still raising the Nw lowest pairs to T=0
         ei = np.concatenate((k_i[double_w], k_i[Nw//2:Nw//2+Nd]))
-        wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
+        wi = k_i[double_w]
+
+        er *= (1-g0*er)
+        ei *= (1-g0*ei)
+        wr *= (1-g0*wr/3)
+        wi *= (1-g0*wi/3)
+
+        # if Nw%2 == 1:
+        #     wr[Nw-1] = 0
+        #     wi[Nw-1] = 0
+        #     er[Ne-1] = k_r[Nw//2+1]
+        #     ei[Ne-1] = k_i[Nw//2+1]
+            # er[Ne-1] = 0
+            # ei[Ne-1] = 0
     else:
         print('Please use Ne >= Nw')
         return Exception('Error: can\'t handle Nw > Ne')
@@ -76,9 +90,6 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
     ei += .07*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
     wi += -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
 
-    if Nw%2 == 1 and Ne == Nw: # Ne != Nw is a polarized state, behaves differently
-        wi[-1] = 0 # the additional pairon is zero in this case.
-        wr[-1] = 0
 
     vars = np.concatenate((er, ei, wr, wi))
     return vars
@@ -112,7 +123,7 @@ def root_thread_job(vars, kc, g, dims, force_gs):
         k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2])) # the e_alpha should be around the ks
         if k_distance > 10**-3 and Ne == Nw: # this only makes sense for Ne == Nw
             er = 1
-        if min_w < 0.5*kc[0] and (Ne+Nw)%2 == 0:
+        if min_w < 0.5*kc[0] and Nw%2 == 0:
             er = 2
     # if len(es) >= 12: # this doesn't happen for really small systems
     #     if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
@@ -341,7 +352,13 @@ def bootstrap_g0(dims, g0, kc,
     else:
         Nei = 2
     Nwi = min(Nw, Nei)
-    vars = g0_guess(L, Nei, min(Nei, Nw), kc, g0, imscale=imscale_v)
+    print('Forming guess with Nei, Nwi ')
+    print((Nei, Nwi))
+    vars = g0_guess(L, Nei, Nwi, kc, g0, imscale=imscale_v)
+    print('Guess vars')
+    ces, cws = unpack_vars(vars, Nei, Nwi)
+    log(ces)
+    log(cws)
     force_gs=True
     while Nei <= Ne:
         log('')
