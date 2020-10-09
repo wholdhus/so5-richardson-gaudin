@@ -79,6 +79,7 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
     if Nw%2 == 1 and Ne == Nw: # Ne != Nw is a polarized state, behaves differently
         wi[-1] = 0 # the additional pairon is zero in this case.
         wr[-1] = 0
+
     vars = np.concatenate((er, ei, wr, wi))
     return vars
 
