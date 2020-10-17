@@ -77,18 +77,18 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
         double_w = np.arange(Nw-1)//2
         Nd = Ne - Nw + 1 # number of extra spin-down pairs
         # Double occupancy of Nw pairs, single occupancy for remaining
-        
+
         er = np.concatenate((k_r[double_w], k_r[Nw//2:Nw//2+Nd]))
         ei = np.concatenate((k_i[double_w], k_i[Nw//2:Nw//2+Nd]))
-        
+
         wr = np.append(k_r[double_w], 0) # still raising the Nw lowest pairs to T=0
         wi = np.append(k_i[double_w], 0)
-        
+
         er *= (1-g0*er)
         ei *= (1-g0*ei)
         wr *= (1-g0*wr/3)
         wi *= (1-g0*wi/3)
-        
+
     else:
         print('Please use Ne >= Nw')
         return Exception('Error: can\'t handle Nw > Ne')
@@ -354,8 +354,9 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
 def bootstrap_g0(dims, g0, kc,
                  imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
-
-    if Ne + Nw == 2:
+    print('Final Ne')
+    print(Ne)
+    if Ne  == 1:
         Nei = 1
     else:
         Nei = 2
@@ -368,6 +369,12 @@ def bootstrap_g0(dims, g0, kc,
     log(ces)
     log(cws)
     force_gs=True
+    if Nei == Ne:
+        dims = (L, Ne, Nw)
+        sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
+                                    max_steps=MAX_STEPS_1,
+                                    use_k_guess=False,
+                                    force_gs=force_gs)
     while Nei <= Ne:
         log('')
         log('Now using {} fermions'.format(2*Nei))
