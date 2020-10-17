@@ -59,7 +59,7 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
         ei = k_i[double_e]*(1-g0*k_r[double_e])
         wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
 
-    elif Ne > Nw: # Will be extra spin down
+    elif Ne > Nw and Nw%2 == 0: # Will be extra spin down
         # Still Nw doubled up T=0 pairs
         double_w = np.arange(Nw)//2
         Nd = Ne - Nw # number of extra spin-down pairs
@@ -73,14 +73,22 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
         ei *= (1-g0*ei)
         wr *= (1-g0*wr/3)
         wi *= (1-g0*wi/3)
-
-        # if Nw%2 == 1:
-        #     wr[Nw-1] = 0
-        #     wi[Nw-1] = 0
-        #     er[Ne-1] = k_r[Nw//2+1]
-        #     ei[Ne-1] = k_i[Nw//2+1]
-            # er[Ne-1] = 0
-            # ei[Ne-1] = 0
+    elif Ne > Nw and Nw%2 == 1:
+        double_w = np.arange(Nw-1)//2
+        Nd = Ne - Nw + 1 # number of extra spin-down pairs
+        # Double occupancy of Nw pairs, single occupancy for remaining
+        
+        er = np.concatenate((k_r[double_w], k_r[Nw//2:Nw//2+Nd]))
+        ei = np.concatenate((k_i[double_w], k_i[Nw//2:Nw//2+Nd]))
+        
+        wr = np.append(k_r[double_w], 0) # still raising the Nw lowest pairs to T=0
+        wi = np.append(k_i[double_w], 0)
+        
+        er *= (1-g0*er)
+        ei *= (1-g0*ei)
+        wr *= (1-g0*wr/3)
+        wi *= (1-g0*wi/3)
+        
     else:
         print('Please use Ne >= Nw')
         return Exception('Error: can\'t handle Nw > Ne')
@@ -396,6 +404,7 @@ def bootstrap_g0(dims, g0, kc,
         log('Error with {} fermions: {}'.format(2*Nei, er))
         # Now using this to form next guess
         es, ws = unpack_vars(vars, Nei, Nwi)
+        last_Nwi = Nwi
         if Nei != Ne:
             incr = min(2, Ne-Nei) # 2 or 1
             print(incr)
@@ -405,7 +414,8 @@ def bootstrap_g0(dims, g0, kc,
             esg, wsg = unpack_vars(vars_guess, Nei, Nwi)
             es = np.append(es, esg[-1*incr:])
             if len(ws) != Nw:
-                ws = np.append(ws, wsg[-1*incr:])
+                winc = Nwi - last_Nwi
+                ws = np.append(ws, wsg[-1*winc:])
             vars = pack_vars(es, ws)
         else:
             Nei = Ne + 1 # so we exit # TODO: make this less hacky
@@ -682,7 +692,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     g_prev = g0
     while keep_going and g != gf:
         rat = g_to_G(g, k)*np.sum(k)
-        log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
+        # log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
         if i == 0:
             print('Bootstrapping from 4 to {} fermions'.format(Ne+Nw))
             try:
@@ -711,7 +721,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
             if i == 0:
                 pass
             elif i % skip == 0 or g == gf and i > 0:
-                log('Removing im(k) at g = {}'.format(g))
+                log('Removing im(k) at G/Gc = {}'.format(rat))
                 try:
                     vars_r, er_r = increment_im_k(vars, dims, g, k, kim,
                                                   steps=max(L, 10),
@@ -782,8 +792,8 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         keep_going = True
         while keep_going:
             rat = g_to_G(1/q, k)*np.sum(k)
-            log('q = {}, G/Gc = {}'.format(np.round(q,4),np.round(rat,4)
-                            ))
+            # log('q = {}, G/Gc = {}'.format(np.round(q,4),np.round(rat,4)
+            #                 ))
             g = 1./q
             sol = root(rgEqs_q, vars, args=(kc, q, dims),
                        method='lm', options=lmd, jac = rg_jac_q)
@@ -794,7 +804,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 ces, cws = unpack_vars(vars, Ne, Nw)
                 if i % skip == 0 or q == qf:
                     try:
-                        log('Removing im(k) at q = {}'.format(q))
+                        log('Removing im(k) at G/Gc = {}'.format(rat))
                         vars_r, er_r = increment_im_k_q(vars, dims, q, k, kim,
                                                         steps=max(L, 10))
                         es, ws = unpack_vars(vars_r, Ne, Nw)
@@ -882,7 +892,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
     Gc = 1./np.sum(k)
-    gf = G_to_g(0.6*Gc, k)
+    gf = G_to_g(0.55*Gc, k)
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     keep_going = True
@@ -893,6 +903,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     gfs = G_to_g(Gfs, k)
     qfs = 1./G_to_g(Gfs, k)
+    Grs = Gfs*np.sum(k)
     Gf_ind = 0
 
     g_prev = g0
@@ -908,7 +919,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     while keep_going and g <= gf:
         rat = g_to_G(g, k)*np.sum(k)
-        log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
+        # log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
 
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', options=lmd, jac=rg_jac,)
@@ -941,7 +952,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
             Code removing imaginary parts and storing results
             """
             if g+dg > gfs[Gf_ind] and g < gfs[Gf_ind]:
-                log('Removing im(k) at g = {}'.format(g))
+                log('Removing im(k) at G/Gc = {}'.format(Grs[Gf_ind]))
                 try:
                     sol = root(rgEqs, vars, args=(kc, gfs[Gf_ind], dims),
                                method='lm', options=lmd, jac=rg_jac,)
@@ -987,8 +998,8 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
     keep_going = True
     while keep_going and q >= qf: # q decreases
         rat = g_to_G(1/q, k)*np.sum(k)
-        log('q = {}, G/Gc = {}'.format(np.round(q,4),np.round(rat,4)
-                        ))
+        # log('q = {}, G/Gc = {}'.format(np.round(q,4),np.round(rat,4)
+        #                 ))
         g = 1./q
         sol = root(rgEqs_q, vars, args=(kc, q, dims),
                    method='lm', options=lmd,
@@ -1024,7 +1035,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
                 try:
                     sol = root(rgEqs_q, vars, args=(kc, qfs[Gf_ind], dims),
                                method='lm', options=lmd, jac = rg_jac_q)
-                    log('Removing im(k) at q = {}'.format(qfs[Gf_ind]))
+                    log('Removing im(k) at G/Gc = {}'.format(Grs[Gf_ind]))
                     vars_r, er_r = increment_im_k_q(vars, dims, qfs[Gf_ind], k, kim,
                                                     steps=max(L, 10))
                     es, ws = unpack_vars(vars_r, Ne, Nw)
