@@ -177,6 +177,7 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None,
     return op_dict
 
 
+
 def iom_dict(L, g, k, k1=0, mult=1, kin=1, g_spin=1, g_dens=1):
 
     ppairing = [] # spin 1 pairing
@@ -398,8 +399,235 @@ def ham_op_2(L, G, ks, basis, no_kin=False, couplings=None,
              exactly_solvable=True):
     hd = hamiltonian_dict(L, G, ks, no_kin=no_kin, couplings=couplings,
                           exactly_solvable=exactly_solvable)
-    h = quantum_operator(hd, basis=basis, check_herm=exactly_solvable)
+    h = quantum_operator(hd, basis=basis,
+                         check_herm=False, check_pcon=False, check_symm=False)
     return h
+
+
+def periodic_ham_1(L, G, basis):
+    # Arrangement: k = (Pi/L)[-L, -L+2, -L-4, ... , -2, 2 .... ,L-2, 0]
+    k_posi = np.pi*np.arange(2, 2*L+2, 2)/(2*L)
+    k = np.concatenate((-1*k_posi[::-1], k_posi[:-1]))
+    k = np.append(k, 0)
+    eps = np.abs(k)
+    all_k = []
+    ppairing = [] # spin 1 pairing
+    zpairing = [] # spin 0 pairing
+    spm = [] # spin spin interaction
+    same_same = [] # n_ksigma n_ksigma
+    same_diff = [] # n_ksigma n_ksigma'
+    for k1 in range(L):
+        p_k1 = L + k1 # index of +k fermions
+        m_k1 = L - (k1+1) # index of -k fermions
+        ep1 = eps[p_k1]
+        em1 = eps[m_k1]
+        all_k += [[ep1, p_k1], [em1, m_k1]]
+        for k2 in range(L):
+            p_k2 = L + k2
+            m_k2 = L - (k2+1)
+            ep2 = eps[p_k2]
+            em2 = eps[m_k2]
+            Vkk = -G*ep1*ep2 # NOTE: this picks up |k\=0 to block pairing at -pi and 0
+            # These allow k=-pi to interact but block k = 0
+            Vkmk = -G*ep1*ep2 
+            Vmkk = -G*ep1*ep2
+            Vmkmk = -G*ep1*ep2
+            ppairing += [[Vkk, p_k1, m_k1, m_k2, p_k2]]
+            zpairing += [
+                         [.5*Vkk, p_k1, p_k2, m_k1, m_k2],
+                         [.5*Vkk, m_k1, m_k2, p_k1, p_k2],
+                         [-.5*Vkk, p_k1, m_k2, m_k1, p_k2],
+                         [-.5*Vkk, m_k1, p_k2, p_k1, m_k2]
+                        ]
+            spm += [
+                    [0.5*Vkk, p_k1, p_k2, p_k1, p_k2],
+                    [0.5*Vkmk, p_k1, m_k2, p_k1, m_k2],
+                    [0.5*Vmkk, m_k1, p_k2, m_k1, p_k2],
+                    [0.5*Vmkmk, m_k1, m_k2, m_k1, m_k2]
+                    ]
+            same_same += [[0.5*Vkk, p_k1, p_k2],
+                          [0.5*Vkmk, p_k1, m_k2],
+                          [0.5*Vmkk, m_k1, p_k2],
+                          [0.5*Vmkmk, m_k1, m_k2]
+                         ]
+    static = [['n|', all_k], ['|n', all_k],
+            ['++--|', ppairing], ['--++|', ppairing],
+            ['+-|+-', zpairing], ['-+|-+', zpairing],
+            ['|++--', ppairing], ['|--++', ppairing],
+            ['+-|-+', spm], ['-+|+-', spm],
+            ['nn|', same_same],
+            ['|nn', same_same],
+            ]
+    return quantum_operator({'static': static}, basis=basis, check_herm=False, check_pcon=False,
+                            check_symm=False)
+
+
+def periodic_ham_2(L, G, basis):
+    # Arrangement: k = (Pi/L)[-L, -L+2, -L-4, ... , -2, 2 .... ,L-2, 0]
+    k_posi = np.pi*np.arange(2, 2*L+2, 2)/(2*L)
+    k = np.concatenate((-1*k_posi[::-1], k_posi[:-1]))
+    k = np.append(k, 0)
+    eps = np.abs(k)
+    all_k = []
+    ppairing = [] # spin 1 pairing
+    zpairing = [] # spin 0 pairing
+    spm = [] # spin spin interaction
+    same_same = [] # n_ksigma n_ksigma
+    same_diff = [] # n_ksigma n_ksigma'
+    for k1 in range(L-1):
+        p_k1 = L + k1 # index of +k fermions
+        m_k1 = L - (k1+1) # index of -k fermions
+        ep1 = eps[p_k1]
+        em1 = eps[m_k1]
+        all_k += [[ep1, p_k1], [em1, m_k1]]
+        
+        Vpk = -G*eps[0]*ep1
+        spm += [[0.5*Vpk, 0, p_k1, 0, p_k1],
+                [0.5*Vpk, 0, m_k1, 0, m_k1],
+                [0.5*Vpk, p_k1, 0, p_k1, 0],
+                [0.5*Vpk, m_k1, 0, m_k1, 0]]
+        same_same += [[0.5*Vpk, 0, p_k1],
+                      [0.5*Vpk, 0, m_k1],
+                      [0.5*Vpk, p_k1, 0],
+                      [0.5*Vpk, m_k1, 0]]
+        
+        for k2 in range(L-1):
+            p_k2 = L + k2
+            m_k2 = L - (k2+1)
+            ep2 = eps[p_k2]
+            em2 = eps[m_k2]
+            Vkk = -G*ep1*ep2
+            ppairing += [[Vkk, p_k1, m_k1, m_k2, p_k2]]
+            zpairing += [
+                         [.5*Vkk, p_k1, p_k2, m_k1, m_k2],
+                         [.5*Vkk, m_k1, m_k2, p_k1, p_k2],
+                         [-.5*Vkk, p_k1, m_k2, m_k1, p_k2],
+                         [-.5*Vkk, m_k1, p_k2, p_k1, m_k2]
+                        ]
+            spm += [
+                    [0.5*Vkk, p_k1, p_k2, p_k1, p_k2],
+                    [0.5*Vkk, p_k1, m_k2, p_k1, m_k2],
+                    [0.5*Vkk, m_k1, p_k2, m_k1, p_k2],
+                    [0.5*Vkk, m_k1, m_k2, m_k1, m_k2]
+                    ]
+            same_same += [[0.5*Vkk, p_k1, p_k2],
+                          [0.5*Vkk, p_k1, m_k2],
+                          [0.5*Vkk, m_k1, p_k2],
+                          [0.5*Vkk, m_k1, m_k2]
+                         ]
+    all_k += [[eps[0], 0]]
+    static = [['n|', all_k], ['|n', all_k],
+            ['++--|', ppairing], ['--++|', ppairing],
+            ['+-|+-', zpairing], ['-+|-+', zpairing],
+            ['|++--', ppairing], ['|--++', ppairing],
+            ['+-|-+', spm], ['-+|+-', spm],
+            ['nn|', same_same],
+            ['|nn', same_same],
+            ]
+    return quantum_operator({'static': static}, basis=basis, check_herm=False, check_pcon=False,
+                            check_symm=False)
+
+
+
+def periodic_ham_3(L, G, basis):
+    # Arrangement: k = (Pi/L)[0, -L, 2, -2, ..., L-2, -L+2]
+    k_pos = np.pi*np.arange(0, 2*L, 2)/(2*L)
+    k_neg = -1*k_pos
+    k_neg[0] = -np.pi
+    k = np.zeros(2*L)
+    for i in range(L):
+        k[2*i] = k_pos[i]
+        k[2*i+1] = k_neg[i]
+    eps = np.abs(k)
+    all_k = []
+    ppairing = [] # spin 1 pairing
+    zpairing = [] # spin 0 pairing
+    spm = [] # spin spin interaction
+    same_same = [] # n_ksigma n_ksigma
+    same_diff = [] # n_ksigma n_ksigma'
+    for k1 in range(L):
+        p_k1 = 2*k1 # index of +k fermions
+        m_k1 = 2*k1+1 # index of -k fermions
+        ep1 = eps[p_k1]
+        em1 = eps[m_k1]
+        all_k += [[ep1, p_k1], [em1, m_k1]]
+        for k2 in range(L):
+            p_k2 = 2*k2
+            m_k2 = 2*k2+1
+            ep2 = eps[p_k2]
+            em2 = eps[m_k2]
+            ppairing += [[-G*ep1*ep2, p_k1, m_k1, m_k2, p_k2]]
+            zpairing += [
+                         [-.5*G*ep1*ep2, p_k1, p_k2, m_k1, m_k2],
+                         [-.5*G*ep1*ep2, m_k1, m_k2, p_k1, p_k2],
+                         [.5*G*ep1*ep2, p_k1, m_k2, m_k1, p_k2],
+                         [.5*G*ep1*ep2, m_k1, p_k2, p_k1, m_k2]
+                         ]
+            spm += [
+                    [-.5*G*ep1*ep2, p_k1, p_k2, p_k1, p_k2],
+                    [-.5*G*ep1*em2, p_k1, m_k2, p_k1, m_k2],
+                    [-.5*G*em1*ep2, m_k1, p_k2, m_k1, p_k2],
+                    [-.5*G*em1*em2, m_k1, m_k2, m_k1, m_k2]
+                    ]
+            same_same += [[-.5*G*ep1*ep2, p_k1, p_k2],
+                          [-.5*G*ep1*em2, p_k1, m_k2],
+                          [-.5*G*em1*ep2, m_k1, p_k2],
+                          [-.5*G*em1*em2, m_k1, m_k2]
+                         ]
+            
+    static = [['n|', all_k], ['|n', all_k],
+            ['++--|', ppairing], ['--++|', ppairing],
+            ['+-|+-', zpairing], ['-+|-+', zpairing],
+            ['|++--', ppairing], ['|--++', ppairing],
+            ['+-|-+', spm], ['-+|+-', spm],
+            ['nn|', same_same],
+            ['|nn', same_same],
+            ]
+    return quantum_operator({'static': static}, basis=basis, check_herm=False, check_pcon=False,
+                            check_symm=False)
+
+
+def antiperiodic_ham(l, G, basis):
+    k  = np.pi*np.arange(-2*l+1, 2*l, 2)/(2*l)
+    eta = np.abs(k)
+    L = 2*l
+    # k should include positive and negative values
+    kin_e = [[eta[ki], ki] for ki in range(L)]
+    ppairing = [] # spin 1 pairing
+    zpairing = [] # spin 0 pairing
+    spm = [] # spin spin interaction
+    same_same = [] # n_ksigma n_ksigma
+    same_diff = [] # n_ksigma n_ksigma'
+    
+    
+    for k1 in range(L):
+        for k2 in range(L):
+            Vkk = -G*eta[k1]*eta[k2]
+            spm += [[.5*Vkk, k1, k2, k1, k2]]
+            same_same += [[.5*Vkk, k1, k2]
+                         ]
+            if k1 >= l and k2 >= l:
+                mk1 = L-k1-1
+                mk2 = L-k2-1
+                ppairing += [[Vkk, k1, mk1, mk2, k2]]
+                zpairing += [
+                             [.5*Vkk, k1, k2, mk1, mk2],
+                             [.5*Vkk, mk1, mk2, k1, k2],
+                             [-.5*Vkk, k1, mk2, mk1, k2],
+                             [-.5*Vkk, mk1, k2, k1, mk2]
+                            ]
+            
+    static = [['n|', kin_e], ['|n', kin_e],
+                ['++--|', ppairing], ['--++|', ppairing],
+                ['+-|+-', zpairing], ['-+|-+', zpairing],
+                ['|++--', ppairing], ['|--++', ppairing],
+                ['+-|-+', spm], ['-+|+-', spm],
+                ['nn|', same_same],
+                ['|nn', same_same],
+                ]
+    return quantum_operator({'static': static}, basis=basis, check_herm=False, check_pcon=False,
+                            check_symm=False)
+
 
 
 def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):

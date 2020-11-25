@@ -356,7 +356,7 @@ def bootstrap_g0(dims, g0, kc,
     L, Ne, Nw, vs, ts = unpack_dims(dims)
     print('Final Ne')
     print(Ne)
-    if Ne  == 1:
+    if Ne == 1:
         Nei = 1
     else:
         Nei = 2
