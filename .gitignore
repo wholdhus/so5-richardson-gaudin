@@ -5,6 +5,7 @@
 *.png
 *.ipynb
 *.DS_Store
+*.p
 
 # Byte-compiled / optimized / DLL files
 
