@@ -12,7 +12,7 @@ from utils import * # There are a lot of boring functions in this other file
 VERBOSE=False
 FORCE_GS=True
 TOL=10**-11
-TOL2=10**-7 # there are plenty of spurious minima around 10**-5
+TOL2=10**-9 # there are plenty of spurious minima around 10**-5
 MAXIT=0 # let's use the default value
 FACTOR=100
 CPUS = multiprocessing.cpu_count()
@@ -47,17 +47,18 @@ def gc_guess(L, Ne, Nw, kc, g0, imscale=0.01):
 
 
 
-def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
+def g0_guess(dims, kc, g0, imscale=0.01):
+    L, Ne, Nw, vs, ts = unpack_dims(dims)
     k_r = kc[:L]
     k_i = kc[L:]
     if Ne == Nw:
-        double_e = np.arange(Ne)//2
-        double_w = np.arange(Nw)//2
+        double_ind = np.arange(Ne)//2
         # Initial guesses from perturbation theory
-        er = k_r[double_e]*(1-g0*k_r[double_e])
-        wr = k_r[double_w]*(1-g0*k_r[double_w]/3)
-        ei = k_i[double_e]*(1-g0*k_r[double_e])
-        wi = k_i[double_w]*(1-g0*k_r[double_w]/3)
+        er = k_r[double_ind]*(1-g0*k_r[double_ind])
+        wr = k_r[double_ind]*(1-g0*k_r[double_ind]/3)
+        ei = k_i[double_ind]*(1-g0*k_i[double_ind])
+        wi = k_i[double_ind]*(1-g0*k_i[double_ind]/3)
+
 
     elif Ne > Nw and Nw%2 == 0: # Will be extra spin down
         # Still Nw doubled up T=0 pairs
@@ -89,16 +90,18 @@ def g0_guess(L, Ne, Nw, kc, g0, imscale=0.01):
         wr *= (1-g0*wr/3)
         wi *= (1-g0*wi/3)
 
+
     else:
         print('Please use Ne >= Nw')
         return Exception('Error: can\'t handle Nw > Ne')
 
+    
     # Also adding some noise (could find at next order in pert. theory?)
     # coefficients are more or less arbitrary
     ei += .07*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
     wi += -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
 
-
+    
     vars = np.concatenate((er, ei, wr, wi))
     return vars
 
@@ -363,15 +366,16 @@ def bootstrap_g0(dims, g0, kc,
     Nwi = min(Nw, Nei)
     print('Forming guess with Nei, Nwi ')
     print((Nei, Nwi))
-    vars = g0_guess(L, Nei, Nwi, kc, g0, imscale=imscale_v)
+    new_dims = (L, Nei, Nwi, ts, vs)
+    vars = g0_guess(new_dims, kc, g0, imscale=imscale_v)
     print('Guess vars')
     ces, cws = unpack_vars(vars, Nei, Nwi)
     log(ces)
     log(cws)
     force_gs=True
     if Nei == Ne:
-        dims = (L, Ne, Nw)
-        sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
+        new_dims = (L, Ne, Nw, ts, vs)
+        sol = find_root_multithread(vars, kc, g0, new_dims, imscale_v,
                                     max_steps=MAX_STEPS_1,
                                     use_k_guess=False,
                                     force_gs=force_gs)
@@ -384,7 +388,7 @@ def bootstrap_g0(dims, g0, kc,
         ces, cws = unpack_vars(vars, Nei, Nwi)
         log(ces)
         log(cws)
-        dims = (L, Nei, Nwi)
+        dims = (L, Nei, Nwi, ts, vs)
         # Solving for 2N fermions using extrapolation from previous solution
         if Nei <= 2:
             sol = find_root_multithread(vars, kc, g0, dims, imscale_v,
@@ -417,7 +421,8 @@ def bootstrap_g0(dims, g0, kc,
             print(incr)
             Nei += incr
             Nwi = min(Nei, Nw)
-            vars_guess = g0_guess(L, Nei, Nwi, kc, g0, imscale=imscale_v)
+            new_dims = (L, Nei, Nwi, ts, vs)
+            vars_guess = g0_guess(new_dims, kc, g0, imscale=imscale_v)
             esg, wsg = unpack_vars(vars_guess, Nei, Nwi)
             es = np.append(es, esg[-1*incr:])
             if len(ws) != Nw:
@@ -431,6 +436,7 @@ def bootstrap_g0(dims, g0, kc,
 
 
 def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
+    print('Multi!')
     vs = np.zeros(L)
 
     if final_N is None:
@@ -453,7 +459,7 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
             if n <= 2:
                 force_gs=False
                 noise_factors=None
-                vars = g0_guess(L, n, n, kc, g0, imscale=imscale_v)
+                vars = g0_guess(dims, kc, g0, imscale=imscale_v)
             else:
                 # The previous solution matches to roughly the accuracy of the solution
                 # for the shared variables
@@ -496,7 +502,8 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
 
                 if n >= 1:
                     es, ws = unpack_vars(vars, n, n)
-                    vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
+                    new_dims = (L, n+incr, n+incr)
+                    vars_guess = g0_guess(new_dims, kc, g0, imscale=imscale_v)
                     esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
                     es = np.append(es, esg[-incr:])
                     ws = np.append(ws, wsg[-incr:])
@@ -530,7 +537,8 @@ def continue_bootstrap(partial_results, imscale_v, final_N):
         incr = 1
         n = partial_Ns[-2]//2
     es, ws = unpack_vars(vars, n, n)
-    vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
+    new_dims = (L, n+incr, n+incr)
+    vars_guess = g0_guess(new_dims, kc, g0, imscale=imscale_v)
     esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
     es = np.append(es, esg[-incr:])
     ws = np.append(ws, wsg[-incr:])
@@ -553,7 +561,7 @@ def continue_bootstrap(partial_results, imscale_v, final_N):
             if n <= 2:
                 force_gs=False
                 noise_factors=None
-                vars = g0_guess(L, n, n, kc, g0, imscale=imscale_v)
+                vars = g0_guess((L, n, n), kc, g0, imscale=imscale_v)
             else:
                 # The previous solution matches to roughly the accuracy of the solution
                 # for the shared variables
@@ -596,7 +604,7 @@ def continue_bootstrap(partial_results, imscale_v, final_N):
 
                 if n >= 1:
                     es, ws = unpack_vars(vars, n, n)
-                    vars_guess = g0_guess(L, n+incr, n+incr, kc, g0, imscale=imscale_v)
+                    vars_guess = g0_guess((L, n+incr, n+incr), kc, g0, imscale=imscale_v)
                     esg, wsg = unpack_vars(vars_guess, n+incr, n+incr)
                     es = np.append(es, esg[-incr:])
                     ws = np.append(ws, wsg[-incr:])
@@ -615,17 +623,16 @@ def continue_bootstrap(partial_results, imscale_v, final_N):
 Code for getting observables from the pairons
 """
 
-def ioms(dims, g, ks, es):
+def ioms(dims, g, ks, es, ws):
     Z = rationalZ
     L, Ne, Nw, vs, ts = unpack_dims(dims)
     R = np.zeros(L, dtype=np.complex128)
     for i, k in enumerate(ks):
-        R[i] = g*np.sum((1-.5*vs[i])*Z(k, es))
-        otherks = ks[np.arange(L) != i]
-        othervs = vs[np.arange(L) != i]
-        R[i] -= g*np.sum(((.5*vs[i]-1)*(.5*othervs-1)-1)
-                           *Z(k, otherks))
-        R[i] += vs[i]*.5
+        otherinds = np.arange(L) != i
+        lambda_k = .5*vs[i]
+        lambda_k -= g*np.sum(((.5*vs[i]-1)*(.5*vs[otherinds]-1)-1
+                                +ts[i]*ts[otherinds])*Z(k, ks[otherinds]))
+        R[i] = g*(1-.5*vs[i]-ts[i])*np.sum(Z(k, es)) + g*ts[i]*np.sum(Z(k, ws)) + lambda_k
     return R
 
 
@@ -634,13 +641,13 @@ def calculate_energies(dims, gs, ks, varss):
 
     energies = np.zeros(len(gs))
     Rs = np.zeros((len(gs), L))
-    qks = (0.5*vs-1)**2-3*(0.5*vs-1) - 1
+    qks = ts*(ts+1) + (0.5*vs-1)**2-3*(0.5*vs-1) - 1
     log('Casimirs')
     log(qks)
     log('Calculating R_k, energy')
     for i, g in enumerate(gs):
         ces, cws = unpack_vars(varss[:, i], Ne, Nw)
-        R = ioms(dims, g, ks, ces)
+        R = ioms(dims, g, ks, ces, cws)
         Rs[i, :] = np.real(R)
         # if np.abs(np.imag(R)).any() > 10**-12:
         #     log('Woah R_{} is compelex'.format(i))
@@ -790,7 +797,7 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
         print('Now incrementing 1/g!')
         q0 = 1./gf
         qf = 1./(G_to_g(Gf, k))
-        min_dq = np.abs(q0 - qf) * 10**-4 # Taking at most 10**5 steps
+        min_dq = np.abs(q0 - qf) * 10**-5 # Taking at most 10**5 steps
         max_dq = np.abs(q0 - qf) * 10**-2 # taking at least 100
         log('Final q: {}'.format(qf))
         dq = dg0
@@ -899,7 +906,7 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
     Gc = 1./np.sum(k)
-    gf = G_to_g(0.55*Gc, k)
+    gf = G_to_g(0.54*Gc, k)
     kim = imscale_k*(-1)**np.arange(L)
     kc = np.concatenate((k, kim))
     keep_going = True
