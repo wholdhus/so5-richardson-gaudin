@@ -134,7 +134,7 @@ def root_thread_job(vars, kc, g, dims, force_gs):
         k_distance = np.max(np.abs(es - k_cplx[np.arange(Ne)//2])) # the e_alpha should be around the ks
         if k_distance > 10**-3 and Ne == Nw: # this only makes sense for Ne == Nw
             er = 1
-        if min_w < 0.5*kc[0] and Nw%2 == 0:
+        if min_w < 0.1*kc[0] and Nw%2 == 0:
             er = 2
     # if len(es) >= 12: # this doesn't happen for really small systems
     #     if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:

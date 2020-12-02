@@ -404,10 +404,10 @@ def ham_op_2(L, G, ks, basis, no_kin=False, couplings=None,
     return h
 
 
-def periodic_ham(l, G, basis):
+def periodic_ham(l, G, basis, full=False):
     # Arrangement: k = (Pi/L)[-L, -L+2, ..., -2, 0, 2, ..., L-2]
     k = np.pi*np.arange(-2*l, 2*l, 2)/(2*l)
-    eta = np.abs(k)
+    eta = np.abs(np.sin(.5*k))
     L = 2*l
     # k should include positive and negative values
     kin_e = [[eta[ki], ki] for ki in range(L)]
@@ -417,7 +417,8 @@ def periodic_ham(l, G, basis):
     same_same = [] # n_ksigma n_ksigma
     same_diff = [] # n_ksigma n_ksigma'
     
-    
+    if not full:
+        eta[0] = 0
     for k1 in range(L):
         for k2 in range(L):
             Vkk = -G*eta[k1]*eta[k2]
@@ -453,7 +454,7 @@ def periodic_ham(l, G, basis):
 
 def antiperiodic_ham(l, G, basis):
     k  = np.pi*np.arange(-2*l+1, 2*l, 2)/(2*l)
-    eta = np.abs(k)
+    eta = np.abs(np.sin(.5*k))
     L = 2*l
     # k should include positive and negative values
     kin_e = [[eta[ki], ki] for ki in range(L)]
