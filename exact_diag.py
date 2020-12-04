@@ -416,7 +416,7 @@ def periodic_ham(l, G, basis, full=False):
     spm = [] # spin spin interaction
     same_same = [] # n_ksigma n_ksigma
     same_diff = [] # n_ksigma n_ksigma'
-    
+
     if not full:
         eta[0] = 0
     for k1 in range(L):
@@ -439,7 +439,7 @@ def periodic_ham(l, G, basis, full=False):
                              [-.5*Vkk, k1, mk2, mk1, k2],
                              [-.5*Vkk, mk1, k2, k1, mk2]
                             ]
-            
+
     static = [['n|', kin_e], ['|n', kin_e],
                 ['++--|', ppairing], ['--++|', ppairing],
                 ['+-|+-', zpairing], ['-+|-+', zpairing],
@@ -463,8 +463,8 @@ def antiperiodic_ham(l, G, basis):
     spm = [] # spin spin interaction
     same_same = [] # n_ksigma n_ksigma
     same_diff = [] # n_ksigma n_ksigma'
-    
-    
+
+
     for k1 in range(L):
         for k2 in range(L):
             Vkk = -G*eta[k1]*eta[k2]
@@ -481,7 +481,7 @@ def antiperiodic_ham(l, G, basis):
                              [-.5*Vkk, k1, mk2, mk1, k2],
                              [-.5*Vkk, mk1, k2, k1, mk2]
                             ]
-            
+
     static = [['n|', kin_e], ['|n', kin_e],
                 ['++--|', ppairing], ['--++|', ppairing],
                 ['+-|+-', zpairing], ['-+|-+', zpairing],

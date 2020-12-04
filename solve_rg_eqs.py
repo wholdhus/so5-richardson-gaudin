@@ -95,13 +95,13 @@ def g0_guess(dims, kc, g0, imscale=0.01):
         print('Please use Ne >= Nw')
         return Exception('Error: can\'t handle Nw > Ne')
 
-    
+
     # Also adding some noise (could find at next order in pert. theory?)
     # coefficients are more or less arbitrary
     ei += .07*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Ne)])
     wi += -3.2*imscale*np.array([((i+2)//2)*(-1)**i for i in range(Nw)])
 
-    
+
     vars = np.concatenate((er, ei, wr, wi))
     return vars
 
@@ -202,12 +202,12 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS_1,
         if min(abs(ws)) < 0.5*min(abs(es)) and force_gs and Nw%2==0:
             # changing to flag only when omega is much smaller than e
             # since all are zero at the critical coupling
-            print('Omega = 0 solution! Rerunning.')
+            # print('Omega = 0 solution! Rerunning.')
             er = 1
     elif len(es) >= 12: # this doesn't happen for really small systems
         if np.max(np.real(es)) > 3 * np.sort(np.real(es))[-3]:
             er = 2  # so I know why this is the error
-            print('One of the e_alpha ran away! Rerunning.')
+            # print('One of the e_alpha ran away! Rerunning.')
     tries = 1
 
     sols = [-999 for i in range(JOBS)]
@@ -216,14 +216,17 @@ def find_root_multithread(vars, kc, g, dims, im_v, max_steps=MAX_STEPS_1,
     noise_scale = im_v
 
     if er > TOL2:
-        log('Bad initial guess. Trying with noise.')
-        log('g = {}, er = {}'.format(g, er))
+        # log('Bad initial guess. Trying with noise.')
+        # log('g = {}, er = {}'.format(g, er))
+        log('Error: {}'.format(er))
+        pass
     while er > TOL2:
         if tries > max_steps:
             log('Stopping')
             return
-        log('{}th try at g = {}'.format(tries, g))
-        log('Smallest error from last set: {}'.format(er))
+        # log('{}th try at g = {}'.format(tries, g))
+        # log('Smallest error from last set: {}'.format(er))
+        log('Error: {}'.format(er))
         if use_k_guess:
             vars0 = np.concatenate(
                                  (np.concatenate((kc[np.arange(Ne)//2],
@@ -253,7 +256,7 @@ def increment_im_k(vars, dims, g, k, im_k, steps=100, max_steps=MAX_STEPS_2,
     prev_vars = vars
     prev_s = s
     while s > 0:
-        log('s = {}'.format(s))
+        # log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -314,7 +317,7 @@ def increment_im_k_q(vars, dims, q, k, im_k, steps=100):
     prev_vars = vars
     prev_s = s
     while s > 0:
-        log('s = {}'.format(s))
+        # log('s = {}'.format(s))
         prev_vars = vars
         prev_s = s
 
@@ -435,14 +438,11 @@ def bootstrap_g0(dims, g0, kc,
     return sol
 
 
-def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
-    print('Multi!')
-    vs = np.zeros(L)
-
+def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None, all=False):
     if final_N is None:
         final_N = 4*L-2
     Ns = np.arange(2, final_N+2, 2)
-    sols = [None for N in Ns]
+    sols = {}
     N_tries = 0
     i = 0
     N = 2
@@ -453,19 +453,12 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
             log('')
             n = N//2
             dims = (L, n, n)
-            print('Dimensions')
-            print(dims)
-            # Solving for 2n fermions using extrapolation from previous solution
             if n <= 2:
                 force_gs=False
                 noise_factors=None
                 vars = g0_guess(dims, kc, g0, imscale=imscale_v)
             else:
-                # The previous solution matches to roughly the accuracy of the solution
-                # for the shared variables
-                # noise_factors = 10*er*np.ones(len(vars))
                 noise_factors = 10**-6*np.ones(len(vars))
-                # But we will still need to try random stuff for the 4 new variables
                 noise_factors[n-2:n] = 1
                 noise_factors[2*n-2:2*n] = 1
                 noise_factors[3*n-2:3*n] = 1
@@ -489,12 +482,11 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
                     raise Exception('Too many nans')
             else:
                 N_tries = 0
-                sols[i] = sol
+                sols[N] = sol
 
                 if n%2 == 1:
-                    # setting up for N divisible by 4 next step
                     if n > 1:
-                        vars = sols[i-1].x # Better to start from last similar case
+                        vars = sols[2*n-2].x
                     n -= 1
                     incr = 2
                 else:
@@ -510,12 +502,9 @@ def bootstrap_g0_multi(L, g0, kc, imscale_v, final_N=None):
                     vars = pack_vars(es, ws)
                 i += 1
                 N += 2
-        except Exception as e:
-            print('Failed at N = {}'.format(Ns[i-1]))
-            print('Returning partial results')
-            Ns = Ns[:i-1]
-            sols = sols[:i-1]
-    return sols, Ns
+        except:
+            raise
+    return sols
 
 
 def continue_bootstrap(partial_results, imscale_v, final_N):
