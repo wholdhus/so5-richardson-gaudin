@@ -888,6 +888,136 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     return output_df
 
 
+def solve_Gs_list_repulsive(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
+                            imscale_v=0.001):
+    L, Ne, Nw, vs, ts = unpack_dims(dims)
+
+    dg0 = dg
+    N = Ne + Nw + np.sum(vs)
+    Gc = 1./np.sum(k)
+    kim = imscale_k*(-1)**np.arange(L)
+    kc = np.concatenate((k, kim))
+    keep_going = True
+    i = 0
+    varss = []
+    gss = []
+    n_fails = 0
+
+    gfs = G_to_g(Gfs, k)
+    print('gfs!')
+    print(gfs)
+    gf = gfs[-1]
+    print('gf')
+    print(gf)
+    Grs = Gfs*np.sum(k)
+    print('Grs!')
+    print(Grs)
+    g_prev = g0
+    Gf_ind = 0
+
+    min_dg = np.abs(gf - g0) * 10**-5 # I don't want to do more than 10**5 steps
+    max_dg = np.abs(gf - g0) * 10**-2
+
+    print('Incrementing from {} to {}'.format(g0, gf))
+
+    vars = sol.x
+    g = g0 - dg # gf is negative!
+
+    while keep_going and g >= gf:
+        print('g = {}, G/Gc = {}'.format(g, g_to_G(g, k)*np.sum(k)))
+        rat = g_to_G(g, k)*np.sum(k)
+
+        sol = root(rgEqs, vars, args=(kc, g, dims),
+                   method='lm', options=lmd, jac=rg_jac,)
+        try:
+            prev_vars = vars # so we can revert if needed
+            vars = sol.x
+            er = max(abs(rgEqs(vars, kc, g, dims)))
+            ces, cws = unpack_vars(vars, Ne, Nw)
+            if np.isnan(ces).any() or np.isnan(cws).any():
+                print('Solution is NAN. Ending g loop')
+                keep_going = False
+            """
+            Code adjusting step sizes
+            """
+            if er < TOL and dg < .01*gf:
+                print('Increasing dg from {} to {}'.format(dg, dg*2))
+                dg *= 1.2 # we can take bigger steps
+            elif er > TOL2 and dg > min_dg:
+                print('Decreasing dg from {} to {}'.format(dg, dg*0.5))
+                dg *= 0.5
+                print('Stepping back from {} to {}'.format(g, g_prev))
+                g = g_prev
+                vars = prev_vars
+            elif er > 10*TOL2 and dg < min_dg:
+                print('Very high error: {}'.format(er))
+                print('Cannot make dg smaller!')
+                print('Stopping!')
+                keep_going = False
+            """
+            Code removing imaginary parts and storing results
+            """
+            cont = True
+            while g-dg < gfs[Gf_ind] and g > gfs[Gf_ind] and cont:
+                log('Removing im(k) at G/Gc = {}'.format(Grs[Gf_ind]))
+                try:
+                    sol = root(rgEqs, vars, args=(kc, gfs[Gf_ind], dims),
+                               method='lm', options=lmd, jac=rg_jac,)
+                    vars_r, er_r = increment_im_k(vars, dims, gfs[Gf_ind], k, kim,
+                                                  steps=max(L, 10),
+                                                  max_steps=-1,
+                                                  force_gs=False)
+                    es, ws = unpack_vars(vars_r, Ne, Nw)
+                    log('Variables after removing im(k)')
+                    log(es)
+                    log(ws)
+                    varss += [vars_r]
+                    gss += [gfs[Gf_ind]]
+                except Exception as e:
+                    print(e)
+                    log('Failed while incrementing im part')
+                    log('Continuing....')
+                    er = 1 # so we decrease step size
+                if Gf_ind+1 < len(Gfs):
+                    Gf_ind += 1
+                else:
+                    cont=False
+            """
+            Code incrementing g for next step
+            """
+            g_prev = g
+            i += 1
+            g -= dg
+        except Exception as e:
+            print('Error during g incrementing')
+            raise(e)
+            print('Quitting the g increments')
+            keep_going=False
+
+    varss = np.array(varss)
+    gss = np.array(gss)
+    output_df = pandas.DataFrame({})
+    output_df['g'] = gss
+    output_df['G'] = g_to_G(gss, k)
+    for n in range(Ne):
+        output_df['Re(e_{})'.format(n)] = varss[:, n]
+        output_df['Im(e_{})'.format(n)] = varss[:, n+Ne]
+    for n in range(Nw):
+        output_df['Re(omega_{})'.format(n)] = varss[:, n+2*Ne]
+        output_df['Im(omega_{})'.format(n)] = varss[:, n+2*Ne+Nw]
+    output_df['energy'], Rs = calculate_energies(dims, gss, k,
+                                                 np.transpose(varss))
+    dRs, nks = calculate_n_k(dims, gss, Rs)
+    for n in range(L):
+        output_df['R_{}'.format(n)] = Rs[:, n]
+        output_df['N_{}'.format(n)] = nks[:, n]
+    print('')
+    print(['!' for i in range(40)])
+    print('Finished!')
+    print(['!' for i in range(40)])
+    return output_df
+
+
 def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
                   imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
