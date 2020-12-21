@@ -454,7 +454,8 @@ def periodic_ham(l, G, basis, full=False):
 
 def antiperiodic_ham(l, G, basis):
     k  = np.pi*np.arange(-2*l+1, 2*l, 2)/(2*l)
-    eta = np.abs(np.sin(.5*k))
+    # eta = np.abs(np.sin(.5*k))
+    eta = np.abs(k)
     L = 2*l
     # k should include positive and negative values
     kin_e = [[eta[ki], ki] for ki in range(L)]
@@ -605,10 +606,10 @@ def quartet_wavefunction(L, N, basis, basisf):
             kj_m = L-j-1
             creation_lst += [[1, ki_p, ki_m, kj_p, kj_m], #T_1 T_-1
                              [1, kj_p, kj_m, ki_p, ki_m], #T_-1 T_1
-                             [-1, ki_p, kj_p, ki_m, kj_m], # -1
-                             [+1, ki_p, kj_m, ki_m, kj_p],
-                             [-1, ki_m, kj_m, ki_p, kj_p], # -1
-                             [+1, ki_m, kj_p, ki_p, kj_m]
+                             [-.5, ki_p, kj_p, ki_m, kj_m], # -1
+                             [+.5, ki_p, kj_m, ki_m, kj_p],
+                             [-.5, ki_m, kj_m, ki_p, kj_p], # -1
+                             [+.5, ki_m, kj_p, ki_p, kj_m]
                              ]
     creation_op = quantum_operator({'static': [['++|++', creation_lst]]}, basis=basisf,
                                    check_herm=False, check_symm=False)
