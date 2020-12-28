@@ -1,10 +1,12 @@
 # Notes, results I should send somewhere else
+*.mp4
 *.txt
 *.csv
 *.json
 *.png
-
+*.ipynb
 *.DS_Store
+*.p
 
 # Byte-compiled / optimized / DLL files
 
