@@ -147,13 +147,13 @@ def hamiltonian_dict(L, G, k, no_kin=False, trig=False, couplings=None,
         #           ['+-|-+', spm]
         #         ]
         static = [
-                    ['++--|', ppairing], ['--++|', ppairing],
-                    ['+-|+-', zpairing], ['-+|-+', zpairing],
-                    ['|++--', ppairing], ['|--++', ppairing],
-                    ['+-|-+', spm], ['-+|+-', spm],
-                    ['nn|', same_same],
-                    ['|nn', same_same],
-                    ['n|n', same_diff]
+                    ['++--|', ppairing], # ['--++|', ppairing],
+                    ['+-|+-', zpairing], # ['-+|-+', zpairing],
+                    ['|++--', ppairing], # ['|--++', ppairing],
+                    ['+-|-+', spm], # ['-+|+-', spm],
+                    # ['nn|', same_same],
+                    # ['|nn', same_same],
+                    # ['n|n', same_diff]
                 ]
     elif not exactly_solvable:
         static = [['n|', all_k], ['|n', all_k],
