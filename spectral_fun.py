@@ -54,21 +54,21 @@ def matrix_elts(k, v0, vp, vm, bp, bm, bf, operators=None):
         log(cm_lo)
     cpv0 = cp_lo.dot(v0)
     cmv0 = cm_lo.dot(v0)
-    cpv = reduce_state(cpv0, bf, bp, test=True)
-    cmv = reduce_state(cmv0, bf, bm, test=True)
+    cpv = reduce_state(cpv0, bf, bp, test=False)
+    cmv = reduce_state(cmv0, bf, bm, test=False)
     lc = len(vp[0, :])
     ld = len(vm[0, :])
     # lc = len(vp[:,0])
     # ld = len(vm[:,0])
     celts = np.zeros(lc, dtype=np.complex128)
     delts = np.zeros(ld, dtype=np.complex128)
-    log('Finding creation matrix elts.')
+    # log('Finding creation matrix elts.')
 
     for i in tqdm(range(lc)):
         v = bp.get_vec(vp[:, i], sparse=False)
         # v = vp[:, i]
         celts[i] = np.vdot(v, cpv0)
-    log('Finding annihilation matrix elts.')
+    # log('Finding annihilation matrix elts.')
     for j in tqdm(range(ld)):
         v = bm.get_vec(vm[:, j], sparse=False)
         # v = vm[:, j]
@@ -80,8 +80,7 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
                       eta=None, couplings=None, subtract_ef=False,
                       exactly_solvable=True,
                       combine_states=True,
-                      savefile=None):
-    print(ks)
+                      savefile=None, rescale_H=False):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -98,10 +97,10 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
         if G != -999:
             e, v = h.eigh()
         else:
-            log('Probably degenerate ground state')
+            # log('Probably degenerate ground state')
             e, v = h.eigh()
-            log('Energies:')
-            log(e)
+            # log('Energies:')
+            # log(e)
         e0 = e[0]
         v0 = basis.get_vec(v[:,0], sparse=False)
         ep, vp = hp.eigh()
@@ -120,28 +119,35 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
             if np.abs(ei - e0) < 10**-8:
                 v00 += v[:, i]
                 n_zero += 1
-        print('Combined {} degenerate states'.format(n_zero))
+        if n_zero > 1:
+            print('Combined {} degenerate states'.format(n_zero))
         v0 = basis.get_vec(v00, sparse=False)
         v0 *= 1./np.linalg.norm(v0)
     mu = 0
     if subtract_ef:
         mu = (ep[0] - e0)
-        log('Fermi energy: {}'.format(mu))
+        # log('Fermi energy: {}'.format(mu))
         e0 -= N*mu
         ep -= (N+1)*mu
         em -= (N-1)*mu
-
+    if rescale_H: # H/G
+        e0 *= 1./np.abs(G)
+        ep *= 1./np.abs(G)
+        em *= 1./np.abs(G)
     celts, delts = matrix_elts(k, v0, vp, vm, basisp, basism, basisf)
     if savefile is not None:
         log('Saving matrix elements to file')
         np.save(savefile+'_plus', np.array([celts, ep]))
         np.save(savefile+'_minus', np.array([delts, em]))
-    log('Largest matrix elements: Creation')
-    log(np.max(celts))
-    log(np.argmax(celts))
-    log('Annihilation')
-    log(np.max(delts))
-    log(np.argmax(delts))
+    print('{} nonzero creation elements'.format(len(celts[np.abs(celts) > 10**-10])))
+    print('{} nonzero annihilation elements'.format(len(delts[np.abs(delts) > 10**-10])))
+
+    # log('Largest matrix elements: Creation')
+    # log(np.max(celts))
+    # log(np.argmax(celts))
+    # log('Annihilation')
+    # log(np.max(delts))
+    # log(np.argmax(delts))
 
     if np.shape(steps) == ():
         ak_plus = np.zeros(steps)
@@ -166,7 +172,7 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
 
 
 def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
-                      eta=None):
+                                 eta=None, couplings=(1,1,1)):
     Nup = N//2
     Ndown = N//2
     if k is None:
@@ -175,9 +181,9 @@ def find_degenerate_spectral_fun(L, N, ks, steps=1000, k=None,
     basism = form_basis(2*L, Nup-1, Ndown)
     basisp = form_basis(2*L, Nup+1, Ndown)
     basisf = spinful_fermion_basis_1d(2*L)
-    h = ham_op_2(L, -999, ks, basis)
-    hp = ham_op_2(L, -999, ks, basisp)
-    hm = ham_op_2(L, -999, ks, basism)
+    h = ham_op_2(L, -1, ks, basis, couplings=couplings, no_kin=True)
+    hp = ham_op_2(L, -1, ks, basisp, couplings=couplings, no_kin=True)
+    hm = ham_op_2(L, -1, ks, basism, couplings=couplings, no_kin=True)
 
     es, v = h.eigh()
 
@@ -336,7 +342,7 @@ def lanczos_coeffs(v0, h, op, full_basis, target_basis, order,
         log('Woops, null vector!')
         return np.zeros(order), np.zeros(order)
     log('Initial state created. Reducing to smaller basis')
-    v = reduce_state(op_v0, full_basis, target_basis, test=True)
+    v = reduce_state(op_v0, full_basis, target_basis, test=False)
 
     log('Performing {}th order Lanczos algorithm'.format(k))
     alphas, betas, vec = lanczos(v, h, order, k=k)
