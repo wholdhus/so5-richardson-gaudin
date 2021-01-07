@@ -666,7 +666,7 @@ def calculate_n_k(dims, gs, Rs):
 Code for getting pairons and observables
 """
 
-def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
+def solve_rgEqs(dims, Gf, k, g0=0.001, imscale_k=0.001,
                   imscale_v=0.001, skip=4):
     """
     Solves Richardson Gaudin equations at intermediate couplings from g0 to Gf,
@@ -888,15 +888,16 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     return output_df
 
 
-def solve_Gs_list_repulsive(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
+def solve_Gs_list_repulsive(dims, sol, Gfs, kc, dg=0.01, g0=0.001,
                             imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
 
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
+    k = kc[:L]
+    kim = kc[L:]
     Gc = 1./np.sum(k)
-    kim = imscale_k*(-1)**np.arange(L)
-    kc = np.concatenate((k, kim))
+
     keep_going = True
     i = 0
     varss = []
@@ -1018,16 +1019,16 @@ def solve_Gs_list_repulsive(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.00
     return output_df
 
 
-def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
+def solve_Gs_list(dims, sol, Gfs, kc, g0, dg=0.01,
                   imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
-
+    vars = sol.x
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
+    k = kc[:L]
+    kim = kc[L:] 
     Gc = 1./np.sum(k)
     gf = G_to_g(0.54*Gc, k)
-    kim = imscale_k*(-1)**np.arange(L)
-    kc = np.concatenate((k, kim))
     keep_going = True
     i = 0
     varss = []
@@ -1044,16 +1045,19 @@ def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
 
     min_dg = np.abs(gf - g0) * 10**-5 # I don't want to do more than 10**5 steps
     max_dg = np.abs(gf - g0) * 10**-2
-
+    es, ws = unpack_vars(vars, Ne, Nw)
+    print('Starting e_alpha')
+    print(es)
+    print('Starting w_beta')
+    print(ws)
     print('Incrementing from {} to {}'.format(g0, gf))
 
-    vars = sol.x
     g = g0 + dg
 
     while keep_going and g <= gf:
-        rat = g_to_G(g, k)*np.sum(k)
+        # rat = g_to_G(g, k)*np.sum(k)
         # log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
-
+    
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', options=lmd, jac=rg_jac,)
         try:

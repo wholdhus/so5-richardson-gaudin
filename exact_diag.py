@@ -30,6 +30,26 @@ def reduce_state(v, full_basis, target_basis, test=False):
         print(np.linalg.norm(v_out))
     return v_out/np.linalg.norm(v_out)
 
+def project_state(v, start_basis, target_basis, test=False):
+    #  v *= 1./np.linalg.norm(v)
+    fdim = len(v)
+    v_out = np.zeros(target_basis.Ns, dtype=np.complex128)
+    for i, s in enumerate(target_basis.states):
+        target_ind = np.where(start_basis.states == s)[0][0]
+        v_out[i] = v[target_ind]
+    if test:
+        vf = target_basis.get_vec(v_out, sparse=False)
+        print('<vin|vout>')
+        print(np.vdot(v, vf))
+        print('| |vin> - |vout> |')
+        print(np.linalg.norm(v - vf))
+        print('Equal?')
+        print((v == vf).all())
+        print('Norms')
+        print(np.linalg.norm(v))
+        print(np.linalg.norm(v_out))
+    return v_out/np.linalg.norm(v_out)
+
 
 def casimir_dict(L, k1, factor):
     p_k1 = L + k1 # index of +k, spin up fermion
