@@ -888,10 +888,11 @@ def solve_rgEqs(dims, Gf, k, dg=0.01, g0=0.001, imscale_k=0.001,
     return output_df
 
 
-def solve_Gs_list_repulsive(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
+def solve_Gs_list_repulsive(dims, g0, kc, Gfs, sol, dg=0.01,
                             imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
-
+    k = kc[:L]
+    kim = kc[L:]
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
     Gc = 1./np.sum(k)
@@ -1018,16 +1019,15 @@ def solve_Gs_list_repulsive(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.00
     return output_df
 
 
-def solve_Gs_list(dims, sol, Gfs, k, dg=0.01, g0=0.001, imscale_k=0.001,
+def solve_Gs_list(dims, g0, kc, Gfs, sol, dg=0.01,
                   imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
-
+    k = kc[:L]
+    kim = kc[L:]
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
     Gc = 1./np.sum(k)
     gf = G_to_g(0.54*Gc, k)
-    kim = imscale_k*(-1)**np.arange(L)
-    kc = np.concatenate((k, kim))
     keep_going = True
     i = 0
     varss = []
