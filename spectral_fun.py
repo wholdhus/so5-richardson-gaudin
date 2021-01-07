@@ -161,6 +161,7 @@ def find_spectral_fun(L, N, G, ks, steps=1000, k=None, n_states=-999,
                     e0 - min(all_es)))
         omegas = np.linspace(1.5*lowmega, 1.5*highmega, steps)
     else:
+        log('Received omega values! Reusing')
         omegas = steps
         ak_plus, ak_minus = np.zeros(len(omegas)), np.zeros(len(omegas))
     if eta is None:
@@ -280,16 +281,15 @@ def check_nonint_spectral_fun(L, N, disp, steps=1000):
     plt.show()
 
 
-def lanczos(v0, H, order, k=None, re_orth=True):
-    if k is None:
-        k = order
+def lanczos(v0, H, steps, n_states=None, re_orth=True):
+    if n_states is None:
+        n_states = steps
     # Normalizing v0:
     v0 *= 1./np.linalg.norm(v0)
-
-    lvs = np.zeros((len(v0), order), dtype=np.complex128)
+    lvs = np.zeros((len(v0), steps), dtype=np.complex128)
     lvs[:, 0] = v0
-    alphas = np.zeros(order, dtype=np.float64)
-    betas = np.zeros(order, dtype=np.float64)
+    alphas = np.zeros(steps, dtype=np.float64)
+    betas = np.zeros(steps, dtype=np.float64)
     last_v = np.zeros(len(v0))
     last_lambda = 0
     last_other = 0
@@ -297,7 +297,7 @@ def lanczos(v0, H, order, k=None, re_orth=True):
     converged = False
     i = 0
     stop = False
-    while i < order and not converged and not stop:
+    while i < steps and not converged and not stop:
         v = lvs[:, i]
         hv = H.dot(v)
         alphas[i] = np.vdot(hv, v)
@@ -309,10 +309,13 @@ def lanczos(v0, H, order, k=None, re_orth=True):
                 coeff = np.vdot(w, tau)
                 w += -1*coeff*tau
         last_v = v
-        if i + 1 < order:
+        if i + 1 < steps: # still at least one more step
             betas[i+1] = np.linalg.norm(w)
-            if betas[i+1] < 10**-6 and i > 2:
+            if betas[i+1] < 10**-9 and i > 2:
+                print('???????????????????')
                 log('{}th beta too small'.format(i+1))
+                print('STOPSTOPSTOPSTOP')
+                print('???????????????????')
                 log(beta)
                 stop = True
             else:
@@ -320,51 +323,58 @@ def lanczos(v0, H, order, k=None, re_orth=True):
             evals = np.sort(eigh_tridiagonal(alphas[:i+1], betas[1:i+1], eigvals_only=True))
             log('{}th step: ground state converged?'.format(i))
             cvg = np.abs((evals[0] - last_lambda)/evals[0])
-            log(cvg)
+            log(np.round(cvg, 4))
             log('Beta? {}'.format(betas[i+1]))
-            if i >= k:
-                log('{}th step: change in {}th eigenvalue'.format(i, k))
-                cvg2 = np.abs(evals[k] - last_other)/evals[k]
+            if i >= n_states:
+                log('{}th step: change in {}th eigenvalue'.format(i, n_states))
+                cvg2 = np.abs(evals[n_states] - last_other)/evals[n_states]
                 log(cvg2)
-                last_other = evals[k]
-                if cvg2 < 10**-12:
-                    # converged=True
-                    pass
+                last_other = evals[n_states]
+                if cvg2 < 10**-10:
+                    print('!!!!!!!!!!!!!')
+                    print('Converged')
+                    print('!!!!!!!!!!!!!')
+                    converged = True
+                    # pass
             last_lambda = min(evals)
         i += 1
+    if i >= steps:
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
+        print('Finished {}th steps'.format(i))
+        print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
     lvs[:, i-1] *= 1./np.linalg.norm(lvs[:, i-1])
     return alphas[:i-1], betas[1:i-1], lvs
 
 
-def lanczos_coeffs(v0, h, op, full_basis, target_basis, order,
-                   k=None, max_digits=None):
+def lanczos_coeffs(v0, h, op, full_basis, target_basis, steps,
+                   n_states=None, max_digits=None):
     op_v0 = op.dot(v0)
     if np.linalg.norm(op_v0) < 10**-12:
         log('Woops, null vector!')
-        return np.zeros(order), np.zeros(order)
+        return np.zeros(steps), np.zeros(steps)
     log('Initial state created. Reducing to smaller basis')
     v = reduce_state(op_v0, full_basis, target_basis, test=False)
 
-    log('Performing {}th order Lanczos algorithm'.format(k))
-    alphas, betas, vec = lanczos(v, h, order, k=k)
-    if k is not None:
-        alphas = alphas[:k]
-        betas = betas[:k-1]
+    log('Performing {}th order Lanczos algorithm'.format(n_states))
+    alphas, betas, vec = lanczos(v, h, steps, n_states=n_states)
+    if n_states is not None:
+        alphas = alphas[:n_states]
+        betas = betas[:n_states-1]
     es, vs = eigh_tridiagonal(alphas, betas)
     coeffs = np.abs(vs[0, :])**2 # first entries squared
     log('Lanczos coefficients')
     log(np.round(coeffs, 5))
     log('Eigenvalues')
     log(es)
-    if max_digits is not None:
-        # return np.round(coeffs, max_digits), np.round(es, max_digits)
+    if max_digits is not None: 
+        # Setting coefficients < max_digits to 0
         coeffs[np.abs(coeffs) < 10**-max_digits] = 0
         es[np.abs(es) < 10**-max_digits] = 0
     return coeffs, es
 
 
-def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000, couplings=None,
-                eta=None):
+def lanczos_akw(L, N, G, ks, lanczos_steps, kf=None, omega_steps=1000, couplings=None,
+                eta=None, lanczos_states=None):
 
     Nup = N//2
     Ndown = N//2
@@ -396,12 +406,15 @@ def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000, couplings=None,
     if Nup < 4*L - 2:
         dim_up = binom(4*L, Nup+1)*binom(4*L, Ndown)
         # up_order = min(dim_up//2, order)
-        up_order = order
-        up_ev = up_order//2
+        up_order = lanczos_steps
+        if lanczos_states is None:
+            up_ev = up_order//2
+        else:
+            up_ev = lanczos_states
         cp_lo = quantum_LinearOperator(cl, basis=basisf, check_symm=False,
                                        check_herm=False)
         coeffs_plus, e_plus = lanczos_coeffs(v0, hp, cp_lo, basisf, basisp, up_order,
-                                             k=up_ev, max_digits=10)
+                                             n_states=up_ev, max_digits=None)
         coeffs_plus, e_plus = coeffs_plus[:up_ev], e_plus[:up_ev]
     else:
         log('Woops, too many fermions, raising will mess things up!')
@@ -412,33 +425,36 @@ def lanczos_akw(L, N, G, ks, order, kf=None, steps=1000, couplings=None,
     if Nup > 1:
         dim_down = binom(4*L, Nup-1)*binom(4*L, Ndown)
         # down_order = min(dim_down//2, order)
-        down_order = order
-        down_ev = down_order//2
+        down_order = lanczos_steps
+        if lanczos_states is None:
+            down_ev = down_order//2
+        else:
+            down_ev = lanczos_states
         cm_lo = quantum_LinearOperator(dl, basis=basisf, check_symm=False,
                                        check_herm=False)
         coeffs_minus, e_minus = lanczos_coeffs(v0, hm, cm_lo, basisf, basism, down_order,
-                                               k=down_ev, max_digits=10)
+                                               n_states=down_ev, max_digits=None)
         coeffs_minus, e_minus = coeffs_minus[:down_ev], e_minus[:down_ev]
     else:
         log('Woops, not enough fermions.')
         coeffs_minus, e_minus = np.zeros(L), np.zeros(L)
 
-    if np.shape(steps) == ():
-        aks_p = np.zeros(steps)
-        aks_m = np.zeros(steps)
+    if np.shape(omega_steps) == ():
+        aks_p = np.zeros(omega_steps)
+        aks_m = np.zeros(omega_steps)
 
         relevant_es = []
         for i, c in enumerate(coeffs_plus):
-            if c > 10**-8:
+            if c > 10**-16:
                 relevant_es += [e_plus[i]]
         for i, c in enumerate(coeffs_minus):
-            if c > 10**-8:
+            if c > 10**-16:
                 relevant_es += [e_minus[i]]
         lowmega = min((min(e0 - relevant_es), min(relevant_es - e0)))
         highmega = max((max(e0 - relevant_es), max(relevant_es - e0)))
         omegas = np.linspace(1.2*lowmega, 1.2*highmega, steps)
     else:
-        omegas = steps
+        omegas = omega_steps
         aks_p, aks_m = np.zeros(len(omegas)), np.zeros(len(omegas))
     if eta is None:
         epsilon = np.mean(np.diff(omegas))
