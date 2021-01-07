@@ -1047,6 +1047,7 @@ def solve_Gs_list(dims, g0, kc, Gfs, sol, dg=0.01,
 
     min_dg = np.abs(gf - g0) * 10**-5 # I don't want to do more than 10**5 steps
     max_dg = np.abs(gf - g0) * 10**-2
+    vars = sol.x
     es, ws = unpack_vars(vars, Ne, Nw)
     print('Starting e_alpha')
     print(es)
