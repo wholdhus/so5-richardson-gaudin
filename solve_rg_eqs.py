@@ -888,10 +888,11 @@ def solve_rgEqs(dims, Gf, k, g0=0.001, imscale_k=0.001,
     return output_df
 
 
-def solve_Gs_list_repulsive(dims, sol, Gfs, kc, dg=0.01, g0=0.001,
+def solve_Gs_list_repulsive(dims, g0, kc, Gfs, sol, dg=0.01,
                             imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
-
+    k = kc[:L]
+    kim = kc[L:]
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
     k = kc[:L]
@@ -1019,14 +1020,15 @@ def solve_Gs_list_repulsive(dims, sol, Gfs, kc, dg=0.01, g0=0.001,
     return output_df
 
 
-def solve_Gs_list(dims, sol, Gfs, kc, g0, dg=0.01,
+def solve_Gs_list(dims, g0, kc, Gfs, sol, dg=0.01,
                   imscale_v=0.001):
     L, Ne, Nw, vs, ts = unpack_dims(dims)
-    vars = sol.x
+    k = kc[:L]
+    kim = kc[L:]
     dg0 = dg
     N = Ne + Nw + np.sum(vs)
     k = kc[:L]
-    kim = kc[L:] 
+    kim = kc[L:]
     Gc = 1./np.sum(k)
     gf = G_to_g(0.54*Gc, k)
     keep_going = True
@@ -1057,7 +1059,7 @@ def solve_Gs_list(dims, sol, Gfs, kc, g0, dg=0.01,
     while keep_going and g <= gf:
         # rat = g_to_G(g, k)*np.sum(k)
         # log('g = {}, G/Gc = {}'.format(np.round(g,4), np.round(rat,4)))
-    
+
         sol = root(rgEqs, vars, args=(kc, g, dims),
                    method='lm', options=lmd, jac=rg_jac,)
         try:
