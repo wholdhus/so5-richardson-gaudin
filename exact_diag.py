@@ -2,21 +2,14 @@ from quspin.basis import spinful_fermion_basis_1d
 from quspin.operators import quantum_operator, quantum_LinearOperator
 import numpy as np
 from tqdm import tqdm
-
-
-def form_basis(L, Nup, Ndown):
-    basis = spinful_fermion_basis_1d(L, Nf=(Nup, Ndown))
-    return basis
+from utils import *
 
 
 def reduce_state(v, full_basis, target_basis, test=False):
-    #  v *= 1./np.linalg.norm(v)
     fdim = len(v)
     v_out = np.zeros(target_basis.Ns, dtype=np.complex128)
     for i, s in enumerate(target_basis.states):
-        # full_ind = np.where(full_basis.states == s)[0][0]
         v_out[i] = v[fdim - s - 1]
-        # v_out[i] = v[full_ind]
     if test:
         vf = target_basis.get_vec(v_out, sparse=False)
         print('<vin|vout>')
@@ -366,70 +359,11 @@ def find_gs_observables(L, Nup, Ndown, g, k, basis, trysparse=True):
     return e0, nks
 
 
-def make_plots():
-    import matplotlib.pyplot as plt
-    L = int(input('L: '))
-    Nup = int(input('Nup: '))
-    Ndown = Nup
-    Gmax = int(input('Gmax: '))
-    basis = form_basis(2*L, Nup, Ndown)
-
-    k = np.array([(2*i+1)*np.pi/L for i in range(L)])
-    all_k = np.concatenate((-1*k[::-1],k))
-    gs = Gmax*np.linspace(0, 1, 7)[1:]
-    es = np.zeros(6)
-    plt.figure(figsize=(8,6))
-    for i, g in enumerate(gs):
-        print('g = {}'.format(g))
-        es[i], nks = find_gs_observables(L, Nup, Ndown, g, k, basis)
-        plt.scatter(k, nks[L:], label='G = {}'.format(np.round(g,2)))
-    plt.title('L = {}, Nup = Ndown = {}'.format(L, Nup))
-    plt.xlabel('k')
-    plt.ylabel('n_k')
-    plt.legend()
-
-    if gs[-1] > 0:
-        plt.savefig('L{}N{}Repulsive.png'.format(L, Nup+Ndown))
-    else:
-        plt.savefig('L{}N{}Repulsive.png'.format(L, Nup+Ndown))
-    plt.show()
-
-    print(all_k)
-
-
-def ham_op(L, G, ks, basis, dtype=np.float64,
-           diagonal_terms=True):
-    g = G/(1-G*np.sum(ks))
-    factor = 2/(1+g*np.sum(ks))
-    for i in range(L):
-        id = iom_dict(L, g, ks, k1=i, mult=ks[i]*factor, kin=1)
-        if i == 0:
-            h = quantum_operator(id, basis=basis, dtype=dtype)
-        else:
-            h += quantum_operator(id, basis=basis, dtype=dtype)
-        if diagonal_terms:
-            # cd = casimir_dict(L, i, factor = G*ks[i]**2)
-            cd = constant_op_dict(L, 3*G*ks[i]**2)
-            co = quantum_operator(cd, basis=basis, dtype=dtype)
-            h -= co
-
-    return h
-
-def ham_op_2(L, G, ks, basis, no_kin=False, couplings=None,
-             exactly_solvable=True):
-    hd = hamiltonian_dict(L, G, ks, no_kin=no_kin, couplings=couplings,
-                          exactly_solvable=exactly_solvable)
-    h = quantum_operator(hd, basis=basis,
-                         check_herm=False, check_pcon=False, check_symm=False)
-    return h
-
-
-def periodic_ham(l, G, basis, full=False):
-    # Arrangement: k = (Pi/L)[-L, -L+2, ..., -2, 0, 2, ..., L-2]
-    k = np.pi*np.arange(-2*l, 2*l, 2)/(2*l)
-    eta = np.abs(np.sin(.5*k))
+def periodic_hamiltonian(l, G, basis, full=False):
+    k = k_peri(2*l)
+    eta = np.abs(k)
+    # eta = np.abs(np.sin(.5*k))
     L = 2*l
-    # k should include positive and negative values
     kin_e = [[eta[ki], ki] for ki in range(L)]
     ppairing = [] # spin 1 pairing
     zpairing = [] # spin 0 pairing
@@ -450,8 +384,6 @@ def periodic_ham(l, G, basis, full=False):
                 mk2 = L-k2
                 if mk1 == 0 or mk2 == 0 or mk1 == l or mk2 == l:
                     print('Woah! -k1, -k2 = {}'.format(k[mk1], k[mk2]))
-                # print('+k, +k\', -k\', -k')
-                # print((k[k1], k[k2], k[mk2], k[mk1]))
                 ppairing += [[Vkk, k1, mk1, mk2, k2]]
                 zpairing += [
                              [.5*Vkk, k1, k2, mk1, mk2],
@@ -472,12 +404,11 @@ def periodic_ham(l, G, basis, full=False):
                             check_herm=False, check_pcon=False, check_symm=False)
 
 
-def antiperiodic_ham(l, G, basis):
-    k  = np.pi*np.arange(-2*l+1, 2*l, 2)/(2*l)
-    # eta = np.abs(np.sin(.5*k))
+def antiperiodic_hamiltonian(l, G, basis):
+    k  = k_anti(2*l)
     eta = np.abs(k)
+    # eta = np.abs(np.sin(.5*k))
     L = 2*l
-    # k should include positive and negative values
     kin_e = [[eta[ki], ki] for ki in range(L)]
     ppairing = [] # spin 1 pairing
     zpairing = [] # spin 0 pairing
@@ -549,10 +480,7 @@ def pair_correlation(v, l1, l2, ks, basis, s1=0, s2=0):
 
 def eta(x, ks):
     return -2j*np.sum(ks*np.sin(ks*x))
-    # if x == 0:
-    #     return 0
-    # else:
-    #     return 1./np.abs(x)
+
 
 def pairing_correlation(vs, i, j, ks, basis):
 
@@ -671,58 +599,3 @@ def iso_wavefunction(L, N, basis, basisf):
         print(np.sum(nk))
     print('Now reducing to the N particle basis')
     return reduce_state(v, basisf, basis) # putting into the N particle basis
-
-
-if __name__ == '__main__':
-    L = 4
-    ks = np.array([(2*i+1)*np.pi/(2*L) for i in range(L)])
-    print(ks)
-    # sep = int(input('Pair separation: '))
-    Nup = 6
-    Ndown = 6
-    basis = form_basis(2*L, Nup, Ndown)
-    basisf = spinful_fermion_basis_1d(2*L)
-
-    Gc = 1./np.sum(ks)
-    h = ham_op_2(L, Gc, ks, basis)
-    # es, v = h.eigsh(k=10, which='SA')
-    es, v = h.eigh()
-    print('Ground state energy:')
-    print(es[0])
-    print('Constructing ?ground state?')
-    v0 = iso_wavefunction(L, Nup+Ndown, basis, basisf)
-    v0 *= 1./np.linalg.norm(v0)
-    print('<vRG|H|vRG> - E0')
-    print(h.matrix_ele(v0, v0) - es[0])
-    print('Q_k')
-    print(find_qk(L, v0, basis))
-
-    print('Constructing quartet state')
-    v4 = quartet_wavefunction(L, Nup+Ndown, basis, basisf)
-    v4 *= 1./np.linalg.norm(v4)
-    print('<v4|H|v4> - E0')
-    print(h.matrix_ele(v4, v4) - es[0])
-    print('Q_k')
-    print(find_qk(L, v4, basis))
-
-    print('Overlap between all the guys')
-    print('|<vRG|v4>|')
-    print(np.abs(np.vdot(v0, v4)))
-
-    print('Degeneracy at this case')
-    print(len(es[np.abs(es - es[0]) < 10**-12]))
-
-    h_above = ham_op_2(L, 1.1*Gc, ks, basis)
-    es, v = h_above.eigh()
-    print('Degeneracy above:')
-    print(len(es[np.abs(es - es[0]) < 10**-12]))
-
-    h_below = ham_op_2(L, .9*Gc, ks, basis)
-    es, v = h_below.eigh()
-    print('Degeneracy below:')
-    print(len(es[np.abs(es - es[0]) < 10**-12]))
-
-    print('Above: is quartet eigenstate?')
-    print(np.max(np.abs(h_above.dot(v4) - h_above.matrix_ele(v4, v4)*v4)))
-    print('Below: is quartet eigenstate?')
-    print(np.max(np.abs(h_below.dot(v4) - h_below.matrix_ele(v4, v4)*v4)))

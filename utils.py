@@ -81,6 +81,16 @@ def unpack_dims(dims):
     return L, Ne, Nw, vs, ts
 
 """
+Momenta for periodic and antiperiodic b.c.
+"""
+def k_anti(L):
+    return np.pi*np.arange(-L+1, L, 2)/L
+
+def k_peri(L):
+    return np.pi*np.arange(-L, L, 2)/L
+
+
+"""
 Richardson-Gaudin equations and Jacobian (derivative w.r.t. pairons)
 """
 
