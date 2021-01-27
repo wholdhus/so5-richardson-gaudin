@@ -40,8 +40,3 @@ on the same Hamiltonians using QuSpin
 
 ``spectral_fun.py`` computes spectral functions
 using exact diagonalization
-
-``rg_hpc.py`` and ``sf_hpc.py`` are scripts to perform
-Richardson-Gaudin and spectral function calculations
-(respectively), written to be easily use to submit jobs
-on HPC architecture.
