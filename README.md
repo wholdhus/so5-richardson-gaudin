@@ -36,7 +36,7 @@ Recommended: L = 4, Ne = Nw = 2, G = 1, and dg = 0.01.
  equations and derive observables for the SO(5) RG models.
 
 ``exact_diag.py`` performs exact diagonalization
-on the same models
+on the same Hamiltonians using QuSpin
 
 ``spectral_fun.py`` computes spectral functions
 using exact diagonalization
